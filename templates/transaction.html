@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BillBot - Transactions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bills.css') }}">
+</head>
+<body>
+    {% include 'sidebar.html' %}
+    <main class="main-content ml-72 p-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-6">Transactions</h1>
+        <p class="text-gray-600 mb-8">View and track all your upcoming and past transactions.</p>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <section class="col-span-1 lg:col-span-1">
+                <div class="card p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-semibold text-gray-800">Bills</h2>
+                        <a href="/add" class="px-2 py-1 bg-blue-600 text-white rounded text-sm">+ Add</a>
+                    </div>
+                    <div class="space-y-3">
+                        {% for b in bills %}
+                        <div class="p-3 border rounded hover:shadow-sm flex items-start justify-between">
+                            <div>
+                                <div class="text-sm font-medium text-gray-800">{{ b.name }}</div>
+                                <div class="text-xs text-gray-500">{{ b.description or '' }}</div>
+                                <div class="text-xs text-gray-600 mt-1">Amount: ₹{{ '%.2f' | format(b.amount_cents / 100.0) }} • Due: {{ b.next_due.strftime('%Y-%m-%d') if b.next_due else 'N/A' }}</div>
+                            </div>
+                            <div class="flex flex-col items-end gap-2">
+                                <form action="/bills/{{ b.id }}/delete" method="post" class="inline" onsubmit="return confirm('Delete this bill?');">
+                                       <button title="Delete bill" class="p-2 text-red-600 hover:bg-red-50 rounded-full">
+                                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                               <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H3a1 1 0 100 2h1v9a2 2 0 002 2h6a2 2 0 002-2V6h1a1 1 0 100-2h-2V3a1 1 0 00-1-1H6zm2 5a1 1 0 012 0v7a1 1 0 11-2 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clip-rule="evenodd" />
+                                           </svg>
+                                       </button>
+                                </form>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="text-sm text-gray-500">No bills yet.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </section>
+
+            <section class="col-span-1 lg:col-span-2">
+                <div class="card p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-semibold text-gray-800">Transaction History</h2>
+                        <a href="/add" class="px-2 py-1 bg-green-600 text-white rounded text-sm">+ Add Transaction</a>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="mb-4">
+                        <div class="flex flex-col md:flex-row md:items-center md:gap-3">
+                            <select id="filterType" class="px-2 py-2 border rounded text-sm w-full md:w-36">
+                                <option value="all">All Types</option>
+                                <option value="income">Income</option>
+                                <option value="expense">Expense</option>
+                            </select>
+                            <select id="filterCategory" class="px-2 py-2 border rounded text-sm w-full md:w-48">
+                                <option value="all">All Categories</option>
+                                {% for c in categories %}
+                                <option value="{{ c }}">{{ c }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="flex items-center gap-2 mt-2 md:mt-0 md:ml-auto">
+                                <input id="filterFrom" type="date" class="px-2 py-2 border rounded text-sm w-36" />
+                                <input id="filterTo" type="date" class="px-2 py-2 border rounded text-sm w-36" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-xs text-gray-500 mb-3">Showing <span id="txnCount">{{ transactions|length }}</span> transactions</div>
+
+                    <div id="transactionsList" class="divide-y">
+                        {% for t in transactions %}
+                        <div class="py-4 flex items-start justify-between txn-row" data-desc="{{ (t.description or '')|e }}" data-cat="{{ (t.category_name or '')|e }}" data-type="{{ t.txn_type }}" data-date="{{ t.occurred_at.isoformat() if t.occurred_at else '' }}" data-amount="{{ (t.amount_cents / 100.0) }}">
+                            <div class="flex items-start gap-4">
+                                <div class="w-10 h-10 flex items-center justify-center rounded-full {% if t.txn_type == 'expense' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+                                    {% if t.txn_type == 'expense' %}-{% else %}+{% endif %}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-gray-800">{{ t.description or (t.txn_type|capitalize) }}</div>
+                                    <div class="text-xs text-gray-500">{{ t.category_name or 'Uncategorized' }} • {{ t.occurred_at.strftime('%Y-%m-%d %H:%M') if t.occurred_at }}</div>
+                                    {% if t.meta %}
+                                    <div class="mt-2 flex flex-wrap gap-1">
+                                        {% for k,v in t.meta.items() %}
+                                        <span class="text-xs bg-gray-100 border px-2 py-0.5 rounded text-gray-600">{{ k }}: {{ v }}</span>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-2">
+                                <div class="text-sm font-semibold text-gray-800">₹{{ '%.2f' | format(t.amount_cents / 100.0) }}</div>
+                                <div class="flex gap-2">
+                                    <form action="/transactions/{{ t.id }}/delete" method="post" class="inline" onsubmit="return confirm('Delete this transaction?');">
+                                        <button title="Delete transaction" class="p-2 text-red-600 hover:bg-red-50 rounded-full">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                                <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H3a1 1 0 100 2h1v9a2 2 0 002 2h6a2 2 0 002-2V6h1a1 1 0 100-2h-2V3a1 1 0 00-1-1H6zm2 5a1 1 0 012 0v7a1 1 0 11-2 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clip-rule="evenodd" />
+                                            </svg>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="py-4 text-sm text-gray-500">No transactions yet.</div>
+                        {% endfor %}
+                    </div>
+
+                    <script>
+                        // Client-side filtering for transactions
+                        (function(){
+                            const search = document.getElementById('filterSearch');
+                            const type = document.getElementById('filterType');
+                            const category = document.getElementById('filterCategory');
+                            const from = document.getElementById('filterFrom');
+                            const to = document.getElementById('filterTo');
+                            const rows = Array.from(document.querySelectorAll('.txn-row'));
+                            const countEl = document.getElementById('txnCount');
+
+                            function applyFilters(){
+                                const qs = (search && search.value) ? search.value.toLowerCase().trim() : '';
+                                const tp = type && type.value ? type.value : 'all';
+                                const cat = category && category.value ? category.value : 'all';
+                                const f = from && from.value ? new Date(from.value) : null;
+                                const t = to && to.value ? new Date(to.value) : null;
+                                let visible = 0;
+                                rows.forEach(r => {
+                                    const desc = (r.dataset.desc || '').toLowerCase();
+                                    const rcat = r.dataset.cat || '';
+                                    const rtype = r.dataset.type || '';
+                                    const rdate = r.dataset.date ? new Date(r.dataset.date) : null;
+                                    let show = true;
+                                    if(qs){
+                                        show = desc.indexOf(qs) !== -1 || (r.dataset.amount && r.dataset.amount.indexOf(qs) !== -1);
+                                    }
+                                    if(show && tp !== 'all') show = (rtype === tp);
+                                    if(show && cat !== 'all') show = (rcat === cat);
+                                    if(show && f && rdate) show = (rdate >= f);
+                                    if(show && t && rdate) show = (rdate <= new Date(t.getFullYear(), t.getMonth(), t.getDate(),23,59,59));
+                                    r.style.display = show ? '' : 'none';
+                                    if(show) visible++;
+                                });
+                                countEl.textContent = visible;
+                            }
+
+                            [search,type,category,from,to].forEach(el => el && el.addEventListener('input', applyFilters));
+                        })();
+                    </script>
+                </div>
+            </section>
+        </div>
+    </main>
+</body>
+</html>

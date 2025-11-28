@@ -1,0 +1,5 @@
+.agents-list{display:flex;flex-direction:column;gap:14px}
+.agent{padding:12px}
+.agent-title{font-weight:700;margin-bottom:6px}
+.agent-desc{color:var(--muted);margin-bottom:8px}
+.agent-meta{display:flex;justify-content:space-between;align-items:center}

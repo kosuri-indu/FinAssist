@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Add Data</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/add_data.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/add_data.css') }}">
+ </head>
+<body>
+    {% include 'sidebar.html' %}
+
+    <main class="main-content ml-72 p-8">
+      <header class="page-header mb-6"><h1 class="text-3xl font-extrabold text-gray-900">Add Data</h1></header>
+
+      <div class="card mx-auto max-w-3xl bg-white shadow-lg rounded-lg p-6">
+        <div class="add-top mb-4 flex justify-center">
+          <label class="select-label w-full md:w-56">
+            <select id="add-type" class="w-full border rounded px-3 py-2 bg-white text-sm">
+              <option value="expense">Add Expense</option>
+              <option value="income">Add Income</option>
+              <option value="bill">Add Bill</option>
+              <option value="quick">Quick Chat Add</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- global category suggestions -->
+        <datalist id="categories">
+          <option>Food</option>
+          <option>Groceries</option>
+          <option>Dining Out</option>
+          <option>Restaurants</option>
+          <option>Travel</option>
+          <option>Transport</option>
+          <option>Taxi</option>
+          <option>Fuel</option>
+          <option>Rent</option>
+          <option>Mortgage</option>
+          <option>Utilities - Electricity</option>
+          <option>Utilities - Water</option>
+          <option>Utilities - Gas</option>
+          <option>Internet</option>
+          <option>Phone</option>
+          <option>Insurance</option>
+          <option>Healthcare</option>
+          <option>Medicine</option>
+          <option>Fitness</option>
+          <option>Subscriptions</option>
+          <option>Education</option>
+          <option>Books</option>
+          <option>Office Supplies</option>
+          <option>Gifts</option>
+          <option>Charity</option>
+          <option>Taxes</option>
+          <option>Salary</option>
+          <option>Freelance</option>
+          <option>Investment Income</option>
+          <option>Interest</option>
+          <option>Transfer</option>
+          <option>Pets</option>
+          <option>Home Improvement</option>
+          <option>Clothing</option>
+          <option>Beauty</option>
+          <option>Entertainment</option>
+          <option>Electronics</option>
+          <option>Parking</option>
+          <option>Toll</option>
+          <option>Maintenance</option>
+        </datalist>
+
+        <section class="add-forms">
+          <form id="form-expense" class="form form-block show" action="/transactions/create" method="post">
+            <h3 class="form-title text-lg font-semibold text-gray-800 mb-3">Add Expense</h3>
+            <input type="hidden" name="txn_type" value="expense">
+            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Amount</div>
+                <input name="amount" type="text" placeholder="₹" class="w-full border px-3 py-2 rounded" />
+              </label>
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Category</div>
+                <input name="category" list="categories" placeholder="Start typing or pick a category" class="w-full border px-3 py-2 rounded" />
+              </label>
+            </div>
+            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Date</div>
+                <input name="occurred_at" type="date" class="w-full border px-3 py-2 rounded" />
+              </label>
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Payment Mode</div>
+                <select name="payment_mode" class="w-full border px-3 py-2 rounded text-sm">
+                  <option>Cash</option>
+                  <option>Debit Card</option>
+                  <option>Credit Card</option>
+                  <option>UPI</option>
+                  <option>Netbanking</option>
+                  <option>Bank Transfer</option>
+                  <option>Mobile Wallet (Paytm)</option>
+                  <option>Mobile Wallet (PhonePe)</option>
+                  <option>Mobile Wallet (Google Pay)</option>
+                  <option>Cheque</option>
+                  <option>Direct Debit</option>
+                  <option>Standing Order</option>
+                  <option>Other</option>
+                </select>
+              </label>
+            </div>
+            <div class="mt-3">
+              <div class="text-sm font-semibold text-gray-700 mb-1">Description</div>
+              <textarea name="description" rows="3" class="w-full border px-3 py-2 rounded"></textarea>
+            </div>
+            <div class="form-actions mt-4"><button class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Add Expense</button></div>
+          </form>
+
+          <form id="form-income" class="form form-block" action="/transactions/create" method="post">
+            <h3 class="form-title text-xl font-semibold text-gray-800 mb-3">Add Income</h3>
+            <input type="hidden" name="txn_type" value="income">
+            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Amount</div>
+                <input name="amount" type="text" placeholder="₹" class="w-full border px-3 py-2 rounded" />
+              </label>
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Category</div>
+                <input name="category" list="categories" placeholder="Salary, Freelance, etc." class="w-full border px-3 py-2 rounded" />
+              </label>
+            </div>
+            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Date</div>
+                <input name="occurred_at" type="date" class="w-full border px-3 py-2 rounded" />
+              </label>
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Source</div>
+                <input name="source" type="text" placeholder="Employer/Client" class="w-full border px-3 py-2 rounded" />
+              </label>
+            </div>
+            <div class="mt-3">
+              <div class="text-sm font-semibold text-gray-700 mb-1">Description</div>
+              <textarea name="description" rows="3" class="w-full border px-3 py-2 rounded"></textarea>
+            </div>
+            <div class="form-actions mt-4"><button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add Income</button></div>
+          </form>
+
+          <form id="form-bill" class="form form-block" action="/bills/create" method="post">
+            <h3 class="form-title text-xl font-semibold text-gray-800 mb-3">Add Bill</h3>
+            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Bill Name</div>
+                <input name="name" type="text" class="w-full border px-3 py-2 rounded" />
+              </label>
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Amount</div>
+                <input name="amount" type="text" placeholder="₹" class="w-full border px-3 py-2 rounded" />
+              </label>
+            </div>
+            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">First Due Date</div>
+                <input name="first_payment_date" type="date" class="w-full border px-3 py-2 rounded" />
+              </label>
+              <label class="block">
+                <div class="text-sm font-semibold text-gray-700 mb-1">Recurring Type</div>
+                <select name="recurring_type" class="w-full border px-3 py-2 rounded text-sm">
+                  <option>one-time</option>
+                  <option>monthly</option>
+                  <option>quarterly</option>
+                  <option>yearly</option>
+                </select>
+              </label>
+            </div>
+            <div class="mt-3">
+              <div class="text-sm font-semibold text-gray-700 mb-1">Category</div>
+              <input name="tag" list="categories" class="w-full border px-3 py-2 rounded" />
+            </div>
+            <div class="mt-3">
+              <div class="text-sm font-semibold text-gray-700 mb-1">Reminder (text)</div>
+              <input name="reminder_text" type="text" placeholder="e.g., pay before 5th" class="w-full border px-3 py-2 rounded" />
+            </div>
+            <div class="form-actions mt-4"><button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Add Bill</button></div>
+          </form>
+
+          <div id="form-quick" class="form form-block">
+            <h3 class="form-title text-xl font-semibold text-gray-800 mb-3">Quick Add (Chat)</h3>
+            <form id="quick-form" action="/transactions/quick" method="post">
+              <div class="mt-2">
+                <input id="quick-text" name="text" type="text" placeholder="e.g., 'Spent 200 on food today'" class="w-full border px-3 py-2 rounded" />
+              </div>
+              <div class="form-actions mt-4"><button id="quick-add-btn" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Quick Add</button></div>
+            </form>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const typeSelect = document.getElementById('add-type');
+      const blocks = { expense: document.getElementById('form-expense'), income: document.getElementById('form-income'), bill: document.getElementById('form-bill'), quick: document.getElementById('form-quick') };
+      function showBlock(name){
+        Object.keys(blocks).forEach(k=>{ blocks[k].classList.remove('show'); });
+        blocks[name].classList.add('show');
+      }
+      typeSelect.addEventListener('change', (e)=> showBlock(e.target.value));
+      // quick add stub behavior (mock)
+      document.getElementById('quick-add-btn').addEventListener('click', (ev)=>{
+        ev.preventDefault();
+        const v = document.getElementById('quick-text').value.trim();
+        if(!v){ alert('Enter quick text'); return; }
+        alert('Quick add received: ' + v);
+        document.getElementById('quick-text').value='';
+      });
+       </script>
+</body>
+</html>
+  

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Transactions</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/transactions.css">
+ </head>
+<body>
+    {% include 'sidebar.html' %}
+
+    <main class="main-content ml-72 p-8">
+      <header class="page-header"><h1>Transactions</h1></header>
+
+      <div class="card filter-row">
+        <select><option>All</option><option>Expense</option><option>Income</option><option>Bill</option></select>
+        <select><option>All Categories</option><option>Food</option><option>Transport</option></select>
+        <input type="date">
+        <input type="date">
+        <input class="search" placeholder="Search">
+      </div>
+
+      <section class="card transactions-list">
+        <table class="full-table transactions-table">
+          <thead>
+            <tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>2025-11-24</td><td>Expense</td><td>Food</td><td>Lunch at cafe</td><td>₹420</td><td><button>Edit</button> <button>Delete</button></td></tr>
+            <tr><td>2025-11-23</td><td>Income</td><td>Salary</td><td>November salary</td><td>₹25,000</td><td><button>Edit</button> <button>Delete</button></td></tr>
+            <tr><td>2025-11-22</td><td>Expense</td><td>Transport</td><td>Taxi</td><td>₹150</td><td><button>Edit</button> <button>Delete</button></td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard • BillBot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/overview.css') }}">
+  <style>
+    /* small tweaks for sticky right column and card shadows */
+    body { overflow-x: hidden; }
+    /* dashboard container fits window minus left sidebar (18rem) to prevent horizontal scroll */
+    .dashboard-container { width: calc(100vw - 18rem); max-width: calc(100vw - 18rem); box-sizing: border-box; }
+    .card { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(15,23,42,0.06); display: flex; flex-direction: column; }
+    .muted { color: #6b7280 }
+    .sparkline { width: 100%; height: 36px; }
+    .scroll-area { max-height: calc(100vh - 140px); overflow: auto; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  {% include 'sidebar.html' %}
+
+  <header class="fixed top-0 left-72 right-0 bg-white border-b z-20">
+    <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+      <div>
+        <div class="text-sm text-gray-500">Welcome, <span class="font-semibold">{{ session.get('user_email') or 'Friend' }}</span></div>
+        <div class="text-xs text-gray-400" id="dashboard-date"></div>
+      </div>
+      <div class="text-right">
+        <div class="text-base font-semibold">Dashboard</div>
+        <div class="text-sm muted">Your AI-powered financial overview is ready.</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="ml-72 pt-20">
+    <div class="dashboard-container mx-auto grid grid-cols-12 gap-6 px-4">
+      <!-- Left / Main Scrollable Column -->
+      <section class="col-span-9">
+        <div class="space-y-6 scroll-area pr-4">
+
+          <!-- AI Insights -->
+          <div class="card p-5 h-full flex flex-col min-h-72">
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-semibold">🧠 AI Insights</h2>
+              <div class="text-sm muted">Source: mock agent_results &middot; insight_agent_v1</div>
+            </div>
+            <div class="mt-4 grid grid-cols-4 gap-4">
+              <div class="col-span-2">
+                <div class="text-sm muted">Top spending category</div>
+                <div id="insight-top-category" class="text-xl font-bold mt-1">—</div>
+              </div>
+              <div>
+                <div class="text-sm muted">Week-over-week</div>
+                <div id="insight-wow" class="text-lg font-semibold mt-1">—</div>
+              </div>
+              <div>
+                <div class="text-sm muted">Biggest expense</div>
+                <div id="insight-biggest" class="text-lg font-semibold mt-1">—</div>
+              </div>
+            </div>
+            <div class="mt-4 flex items-start gap-6">
+              <div class="flex-1">
+                <div class="text-sm muted">Behavior pattern</div>
+                <div id="insight-pattern" class="mt-1">—</div>
+              </div>
+              <div class="w-64">
+                <div class="text-sm muted">Smart recommendation</div>
+                <div id="insight-reco" class="text-sm bg-green-50 border-l-4 border-green-400 p-3 mt-1 rounded">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Forecast -->
+          <div class="card p-5 h-full flex flex-col min-h-72">
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-semibold">📈 AI Forecast (Next Month)</h2>
+              <div class="text-sm muted">Source: mock agent_results &middot; forecast_agent_v1</div>
+            </div>
+            <div class="mt-4 grid grid-cols-3 gap-4">
+              <div>
+                <div class="text-sm muted">Predicted total</div>
+                <div id="forecast-total" class="text-2xl font-bold mt-1">—</div>
+              </div>
+              <div>
+                <div class="text-sm muted">Category shifts</div>
+                <div id="forecast-cats" class="mt-1 text-sm">—</div>
+              </div>
+              <div>
+                <div class="text-sm muted">Estimated savings</div>
+                <div id="forecast-savings" class="text-lg font-semibold mt-1">—</div>
+              </div>
+            </div>
+            <div class="mt-4">
+              <div class="text-sm muted">Trend summary</div>
+              <div id="forecast-trend" class="mt-2 text-sm">—</div>
+            </div>
+          </div>
+
+          <!-- Reminders -->
+          <div class="card p-5 h-full flex flex-col">
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-semibold">🔔 Bill Reminders</h2>
+              <div class="text-sm muted">Source: mock agent_results &middot; reminder_agent_v1 & notifications</div>
+            </div>
+            <div class="mt-3" id="reminder-ai-block">—</div>
+            <div class="mt-4 grid grid-cols-3 gap-4">
+              <div>
+                <div class="text-sm font-semibold text-orange-600">Due Today</div>
+                <div id="reminders-due-today" class="mt-2 space-y-2"></div>
+              </div>
+              <div>
+                <div class="text-sm font-semibold text-yellow-600">Upcoming</div>
+                <div id="reminders-upcoming" class="mt-2 space-y-2"></div>
+              </div>
+              <div>
+                <div class="text-sm font-semibold text-red-600">Overdue</div>
+                <div id="reminders-overdue" class="mt-2 space-y-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Monthly Summary & Savings Goal (1x2 grid) -->
+          <div class="grid grid-cols-2 gap-6 items-stretch">
+            <div class="card p-5 h-full flex flex-col">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">💸 Monthly Summary</h2>
+                <div class="text-sm muted">Transactions summary (mock)</div>
+              </div>
+              <div class="mt-4 grid grid-cols-3 gap-4">
+                <div class="p-4 rounded border">
+                  <div class="text-sm muted">Total Expense</div>
+                  <div id="sum-expense" class="text-2xl font-bold text-red-600 mt-2">—</div>
+                </div>
+                <div class="p-4 rounded border">
+                  <div class="text-sm muted">Total Income</div>
+                  <div id="sum-income" class="text-2xl font-bold text-green-600 mt-2">—</div>
+                </div>
+                <div class="p-4 rounded border">
+                  <div class="text-sm muted">Net Savings</div>
+                  <div id="sum-net" class="text-2xl font-bold text-blue-600 mt-2">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="card p-5 h-full flex flex-col">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">🎯 Savings Goal</h2>
+                <div class="text-sm muted">Progress</div>
+              </div>
+              <div class="mt-4">
+                <div class="text-sm muted">Goal: ₹50,000</div>
+                <div class="w-full bg-gray-200 rounded h-4 mt-3 overflow-hidden"><div id="savings-progress" class="h-4 bg-green-500" style="width:40%"></div></div>
+                <div class="text-sm muted mt-3">Projected monthly save: <strong id="proj-save">₹3,000</strong></div>
+              </div>
+            </div>
+          </div>
+            <!-- Monthly Summary -->
+            <div class="card p-5 h-full flex flex-col">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">💸 Monthly Summary</h2>
+                <div class="text-sm muted">Transactions summary</div>
+              </div>
+              <div class="mt-4 grid grid-cols-3 gap-4">
+                <div class="p-4 rounded border">
+                  <div class="text-sm muted">Total Expense</div>
+                  <div id="sum-expense" class="text-2xl font-bold text-red-600 mt-2">—</div>
+                </div>
+                <div class="p-4 rounded border">
+                  <div class="text-sm muted">Total Income</div>
+                  <div id="sum-income" class="text-2xl font-bold text-green-600 mt-2">—</div>
+                </div>
+                <div class="p-4 rounded border">
+                  <div class="text-sm muted">Net Savings</div>
+                  <div id="sum-net" class="text-2xl font-bold text-blue-600 mt-2">—</div>
+                </div>
+              </div>
+            </div>
+
+          <!-- Category Breakdown (with small companion panel) -->
+          <div class="grid grid-cols-2 gap-6 items-stretch">
+            <div class="card p-5 h-full flex flex-col">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">🔍 Category Breakdown</h2>
+                <div class="text-sm muted">Top 4 categories</div>
+              </div>
+              <div class="mt-4 grid grid-cols-2 gap-4">
+                <div id="category-list" class="space-y-3"></div>
+                <div>
+                  <svg id="cat-spark" class="w-full h-32"></svg>
+                </div>
+              </div>
+            </div>
+            <div class="card p-5 h-full flex flex-col">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">📊 Quick Metrics</h2>
+                <div class="text-sm muted">Overview</div>
+              </div>
+              <div class="mt-4 space-y-3">
+                <div class="text-sm muted">Budget Utilization</div>
+                <div class="mt-2">
+                  <div class="text-xs muted">Essentials</div>
+                  <div class="w-full bg-gray-200 rounded h-3 mt-1"><div id="util-essentials" class="h-3 bg-indigo-500" style="width:40%"></div></div>
+                </div>
+                <div class="mt-2">
+                  <div class="text-xs muted">Discretionary</div>
+                  <div class="w-full bg-gray-200 rounded h-3 mt-1"><div id="util-discr" class="h-3 bg-pink-500" style="width:30%"></div></div>
+                </div>
+                <div class="mt-3 flex justify-between"><div class="muted">Upcoming bills</div><div id="qm-bills" class="font-semibold">—</div></div>
+                <div class="flex justify-between"><div class="muted">Recent txns</div><div id="qm-txns" class="font-semibold">—</div></div>
+              </div>
+            </div>
+          </div>
+    
+
+          <!-- Recent Transactions -->
+          <div class="card p-5">
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-semibold">🧾 Recent Transactions</h2>
+              <div class="text-sm muted">Last 5 transactions</div>
+            </div>
+            <div class="mt-4">
+              <table class="w-full text-left text-sm">
+                <thead class="text-xs text-gray-500">
+                  <tr>
+                    <th class="pb-2">Type</th>
+                    <th class="pb-2">Category</th>
+                    <th class="pb-2">Amount</th>
+                    <th class="pb-2">Date</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-txns" class="text-sm"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Right sticky results column -->
+      <aside class="col-span-3">
+        <div class="sticky top-20 space-y-4">
+          <div class="card p-4 min-h-56">
+            <div class="flex items-center justify-between">
+              <div class="text-sm muted">Stagnant Results</div>
+              <div class="text-xs muted">Quick summary</div>
+            </div>
+            <div class="mt-3 space-y-4">
+              <div class="p-3 bg-gray-50 rounded">
+                <div class="text-xs muted">Income (this month)</div>
+                <div id="st-income" class="text-lg font-semibold text-green-600">—</div>
+              </div>
+              <div class="p-3 bg-gray-50 rounded">
+                <div class="text-xs muted">Expenses (this month)</div>
+                <div id="st-expense" class="text-lg font-semibold text-red-600">—</div>
+              </div>
+              <div class="p-3 bg-gray-50 rounded">
+                <div class="text-xs muted">Upcoming bills</div>
+                <div id="st-bills" class="text-lg font-semibold">—</div>
+              </div>
+              <div class="p-3 bg-gray-50 rounded">
+                <div class="text-xs muted">Recent transactions</div>
+                <div id="st-txns" class="text-lg font-semibold">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-4 min-h-48">
+            <div class="text-sm muted">Spending Trend</div>
+            <svg class="sparkline mt-3" viewBox="0 0 100 36" preserveAspectRatio="none"><polyline id="trendline" fill="none" stroke="#0ea5a4" stroke-width="2" points=""></polyline></svg>
+          </div>
+        
+        </div>
+      </aside>
+
+    </div>
+  </main>
+
+  <script>
+    // Mock data (UI-only). Replace with real data when backend available.
+    const mock = {
+      userName: 'Sanjay',
+      date: new Date().toLocaleDateString(),
+      insight: {
+        topCategory: 'Food',
+        topAmount: 4200,
+        wow: '+6%',
+        biggest: {amount:1200, label:'Travel'},
+        pattern: 'Your weekend spending is higher than weekdays.',
+        reco: 'Try reducing food orders to save ₹500+ next month.'
+      },
+      forecast: {
+        total: 18500,
+        change: '+4%',
+        cats: ['Food +8%','Transport -5%'],
+        savings: 3000,
+        trend: 'Slight increase expected due to seasonal spending.'
+      },
+      reminders: {
+        ai_text: 'You have 2 bills due this week.',
+        due_today: [{name:'Electricity', due:'2025-11-28', amount:3500}],
+        upcoming: [{name:'Internet', due:'2025-12-03', amount:999}],
+        overdue: [{name:'Water', due:'2025-11-20', amount:400}]
+      },
+      monthly: {expense: 12850, income: 42000},
+      categories: [ ['Food',4200], ['Transport',1800], ['Entertainment',900], ['Rent',7000] ],
+      txns: [ ['Expense','Food',220,'Today'], ['Income','Salary',25000,'2025-11-01'], ['Expense','Transport',300,'2025-11-26'], ['Expense','Entertainment',450,'2025-11-22'], ['Expense','Utilities',999,'2025-11-15'] ]
+    };
+
+    // hydrate UI: try to fetch DB-driven endpoints; fall back to mock data when unavailable
+    async function fetchJson(url){
+      try{
+        const r = await fetch(url, {credentials: 'same-origin'});
+        if(r.ok) return await r.json();
+      }catch(e){/* ignore */}
+      return null;
+    }
+
+    async function loadDashboard(){
+      // server endpoints we will try to use (these may be added later):
+      // /api/dashboard/summary => { monthly:{income,expense,net}, categories:[...], reminders:{...} }
+      // /api/transactions/recent => [{type,category,amount,date}, ...]
+      // /api/notifications/json => { notifications: [...] }
+      const [summary, recentTxns, notifications] = await Promise.all([
+        fetchJson('/api/dashboard/summary'),
+        fetchJson('/api/transactions/recent'),
+        fetchJson('/api/notifications/json')
+      ]);
+
+      const data = summary || {};
+
+      const source = summary ? 'live' : 'mock';
+
+      // Insights & Forecast remain mocked (AI agents). Fill those from mock always.
+      try{ document.getElementById('dashboard-date').textContent = mock.date }catch(e){}
+      document.getElementById('insight-top-category').textContent = `${mock.insight.topCategory} (₹${mock.insight.topAmount})`;
+      document.getElementById('insight-wow').textContent = mock.insight.wow;
+      document.getElementById('insight-biggest').textContent = `₹${mock.insight.biggest.amount} • ${mock.insight.biggest.label}`;
+      document.getElementById('insight-pattern').textContent = mock.insight.pattern;
+      document.getElementById('insight-reco').textContent = mock.insight.reco;
+      document.getElementById('forecast-total').textContent = `₹${mock.forecast.total} (${mock.forecast.change})`;
+      document.getElementById('forecast-cats').textContent = mock.forecast.cats.join(', ');
+      document.getElementById('forecast-savings').textContent = `₹${mock.forecast.savings}`;
+      document.getElementById('forecast-trend').textContent = mock.forecast.trend;
+
+      // Reminders: prefer notifications endpoint, otherwise mock
+      let reminders = mock.reminders;
+      if(notifications && Array.isArray(notifications.notifications)){
+        // transform provider notifications to our simple structure
+        const ns = notifications.notifications;
+        const due_today = ns.filter(n=> n.type && n.type.includes('today')).map(n=>({name:n.title, due:(n.meta && n.meta.due_date)||n.created_at, amount:(n.meta && n.meta.amount_cents ? Math.round((n.meta.amount_cents||0)/100) : 0)}));
+        const upcoming = ns.filter(n=> n.type && n.type.includes('week')).map(n=>({name:n.title, due:(n.meta && n.meta.due_date)||n.created_at, amount:(n.meta && n.meta.amount_cents ? Math.round((n.meta.amount_cents||0)/100) : 0)}));
+        reminders = { ai_text: null, due_today, upcoming, overdue: ns.filter(n=> n.type && n.type.includes('overdue')).map(n=>({name:n.title, due:(n.meta && n.meta.due_date)||n.created_at, amount:(n.meta && n.meta.amount_cents ? Math.round((n.meta.amount_cents||0)/100) : 0)})) };
+      }
+      document.getElementById('reminder-ai-block').innerHTML = reminders.ai_text ? `<div class="text-sm bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded">${reminders.ai_text}</div>` : '';
+      function mkBillCard(b){ return `<div class="p-3 rounded border flex items-center justify-between"><div><div class="font-semibold">${b.name}</div><div class="text-xs muted">Due ${b.due}</div></div><div class="text-sm font-semibold">₹${b.amount}</div></div>` }
+      document.getElementById('reminders-due-today').innerHTML = (reminders.due_today||[]).map(mkBillCard).join('');
+      document.getElementById('reminders-upcoming').innerHTML = (reminders.upcoming||[]).map(mkBillCard).join('');
+      document.getElementById('reminders-overdue').innerHTML = (reminders.overdue||[]).map(mkBillCard).join('');
+
+      // Monthly summary: prefer summary.monthly
+      const monthly = (data.monthly) ? data.monthly : mock.monthly;
+      document.getElementById('sum-expense').textContent = `₹${monthly.expense}`;
+      document.getElementById('sum-income').textContent = `₹${monthly.income}`;
+      document.getElementById('sum-net').textContent = `₹${monthly.income - monthly.expense}`;
+
+      // Category breakdown: prefer data.categories else mock
+      const categories = data.categories && data.categories.length ? data.categories : mock.categories;
+      const maxCat = Math.max(...categories.map(c=>c[1]));
+      const catList = document.getElementById('category-list');
+      catList.innerHTML = '';
+      categories.forEach(c=>{
+        const pct = Math.round((c[1]/maxCat)*100);
+        const div = document.createElement('div');
+        div.innerHTML = `<div class="flex items-center justify-between"><div>${c[0]}</div><div class="font-semibold">₹${c[1]}</div></div><div class="w-full h-2 bg-gray-200 rounded mt-1"><div style='width:${pct}% ' class='h-2 bg-indigo-500 rounded'></div></div>`;
+        catList.appendChild(div);
+      });
+      const catSpark = document.getElementById('cat-spark');
+      const pts = categories.map((c,i)=> `${10 + i*20},${30 - (c[1]/maxCat)*24}`).join(' ');
+      catSpark.innerHTML = `<polyline points="${pts}" fill="none" stroke="#6366f1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+
+      // Recent txns: prefer recentTxns or mock.txns
+      const txsData = (recentTxns && recentTxns.transactions) ? recentTxns.transactions : mock.txns;
+      const txs = document.getElementById('recent-txns');
+      txs.innerHTML = '';
+      txsData.forEach(t=>{
+        const tr = document.createElement('tr');
+        // t may be array (mock) or object
+        if(Array.isArray(t)){
+          tr.innerHTML = `<td class='py-2 ${t[0]==='Income'?'text-green-600':'text-red-600'}'>${t[0]}</td><td class='py-2'>${t[1]}</td><td class='py-2 font-semibold'>₹${t[2]}</td><td class='py-2 muted'>${t[3]}</td>`;
+        } else {
+          tr.innerHTML = `<td class='py-2 ${t.txn_type==='income'?'text-green-600':'text-red-600'}'>${t.txn_type}</td><td class='py-2'>${t.category || t.category_name || ''}</td><td class='py-2 font-semibold'>₹${Math.round((t.amount_cents||0)/100)}</td><td class='py-2 muted'>${t.occurred_at || t.date || ''}</td>`;
+        }
+        txs.appendChild(tr);
+      });
+
+      // Stagnant right column values
+      document.getElementById('st-income').textContent = `₹${monthly.income}`;
+      document.getElementById('st-expense').textContent = `₹${monthly.expense}`;
+      document.getElementById('st-bills').textContent = `${(reminders.due_today||[]).length + (reminders.upcoming||[]).length} upcoming`;
+      document.getElementById('st-txns').textContent = `${txsData.length} recent`;
+
+      // Quick metrics fields
+      document.getElementById('qm-bills').textContent = `${(reminders.upcoming||[]).length}`;
+      document.getElementById('qm-txns').textContent = `${txsData.length}`;
+
+      // budget utilization (mock calculation if server not provided)
+      const essentialsPct = data.utilization ? data.utilization.essentials_pct : 40;
+      const discrPct = data.utilization ? data.utilization.discretionary_pct : 30;
+      document.getElementById('util-essentials').style.width = essentialsPct + '%';
+      document.getElementById('util-discr').style.width = discrPct + '%';
+
+      // trendline (mocked if no data)
+      const trend = (data.trend && data.trend.points) ? data.trend.points : [10,12,14,13,15,18,16,19,20,18];
+      const maxT = Math.max(...trend);
+      const points = trend.map((v,i)=> `${i*(100/(trend.length-1))},${36 - (v/maxT)*32}`).join(' ');
+      document.getElementById('trendline').setAttribute('points', points);
+    }
+
+    loadDashboard();
+
+    // Run reminder button wired to backend when available
+    document.getElementById('run-reminder').addEventListener('click', async function(){
+      try{
+        const r = await fetch('/agents/reminders/run', {method:'POST', credentials:'same-origin'});
+        const j = await r.json();
+        // reload reminders after run
+        await loadDashboard();
+        alert('Reminder agent run: ' + (j.status||'done'));
+      }catch(e){
+        alert('Failed to run reminder agent: ' + e);
+      }
+    });
+
+  </script>
+</body>
+</html>

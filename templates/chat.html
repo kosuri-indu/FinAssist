@@ -1,239 +1,138 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BillBot - Chat</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/overview.css') }}">
-</head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Chat Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/overview.css') }}">
+  <!-- Markdown renderer and sanitizer for assistant replies -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+  <style>
+    /* Simple chat bubble styles */
+    html, body { height: 100%; }
+    /* Make chat window a fixed height so card doesn't fill entire viewport */
+    .chat-window { height: 60vh; overflow-y: auto; padding: 1rem; display:flex; flex-direction:column; gap:0.75rem; }
+    .bubble { max-width: 80%; padding: .6rem .8rem; border-radius: .75rem; }
+    .bubble.user { margin-left: auto; background: #1F2937; color: white; border-bottom-right-radius: .25rem; }
+    /* Assistant reply bubble: green background, black text (as requested). */
+    .bubble.ai { margin-right: auto; background: #e6ffea; color: #000; border-bottom-left-radius: .25rem; }
+    /* Allow rendered HTML inside AI bubbles to wrap nicely */
+    .bubble.ai p { margin: 0 0 0.5rem 0; color: inherit; }
+    .bubble.ai table { border-collapse: collapse; width: 100%; }
+    .bubble.ai th, .bubble.ai td { border: 1px solid #d1fae5; padding: 6px 8px; text-align: left; }
+    .bubble.ai th { background:#f0fff4; font-weight:600; }
+  </style>
+ </head>
 <body>
     {% include 'sidebar.html' %}
-    <main class="main-content ml-72 p-6 md:p-8 max-w-full pr-80">
-        <header class="mb-6">
-            <h1 class="text-3xl font-extrabold text-gray-900">Chat</h1>
-            <p class="text-gray-600 mt-1">Ask the assistant anything.</p>
+
+    <main class="main-content ml-72 p-8">
+        <header class="mb-4">
+          <h1 class="text-3xl font-extrabold text-gray-900">Assistant Chat</h1>
+          <p class="text-sm text-gray-600">Ask questions about your finances or transactions.</p>
         </header>
 
-        <section id="chat-section" class="bg-white rounded-lg shadow p-6 max-w-full">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="chat-grid">
-                <!-- Left: Chat messages -->
-                <div id="chat-left" class="md:col-span-2 flex flex-col">
-                    <div id="chat-window" class="flex-1 overflow-auto space-y-4 mb-4"></div>
-                    <div id="suggested-prompts" class="mt-3 flex flex-wrap gap-2"></div>
-                    <div id="chat-error" class="text-sm text-red-600 mt-2" style="display:none"></div>
+        <div class="bg-white rounded-lg shadow p-4 flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-sm text-gray-700">Model: <strong class="text-gray-900">gpt-4o-mini</strong></div>
+            <div class="text-xs text-gray-500">Connected</div>
+          </div>
 
-                    <!-- Input area placed inside left column so it aligns with the chat column width only -->
-                    <form id="chat-form" class="flex gap-2 mt-4">
-                        <input id="chat-input" class="flex-1 border rounded p-2" placeholder="Type a message..." autocomplete="off" />
-                        <button id="chat-send" type="submit" class="bg-green-600 text-white px-4 py-2 rounded">Send</button>
-                    </form>
-                    <!-- Typing/status indicator below the input as requested -->
-                    <div id="chat-status" class="text-sm text-gray-500 mt-2" style="display:none">
-                        <span id="chat-spinner" style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#10B981; margin-right:8px; animation:chat-spin 1s linear infinite;"></span>
-                        <span id="chat-status-text">Assistant is typing…</span>
-                    </div>
-                </div>
+          <div id="chat-window" class="chat-window bg-gray-50 rounded-lg">
+            <!-- messages will appear here -->
+            <div class="bubble ai">Hello there, I am here to  help you summarize your spending or transactions.</div>
+          </div>
 
-                <!-- Right: Context panel (now inside the chat section) -->
-                <aside id="chat-context-panel" class="md:col-span-1 flex flex-col bg-gray-50 p-4 rounded overflow-auto">
-                    <h3 class="font-semibold mb-2">Your data (context)</h3>
-                    <div id="ctx-summary" class="text-sm text-gray-700 mb-3">Loading...</div>
-                    <h4 class="font-medium">Top bills</h4>
-                    <ul id="ctx-top-bills" class="mt-2 list-none text-sm"></ul>
-                    <h4 class="font-medium mt-4">Quick actions</h4>
-                    <div class="mt-2 flex flex-col gap-2" id="ctx-actions"></div>
-                </aside>
-            </div>
-
-            <!-- (input moved inside the left column) -->
-        </section>
+          <form id="chat-form" class="mt-4 flex gap-3 items-end">
+            <textarea id="chat-input" rows="1" placeholder="Type a message or add: 'Spent 200 on groceries'" class="flex-1 border rounded px-3 py-2 resize-none"></textarea>
+            <button id="send-btn" class="bg-indigo-600 text-white px-4 py-2 rounded">Send</button>
+          </form>
+        </div>
+      </div>
     </main>
 
-<script>
-const chatWindow = document.getElementById('chat-window');
-const chatForm = document.getElementById('chat-form');
-const chatInput = document.getElementById('chat-input');
-const chatError = document.getElementById('chat-error');
+    <script>
+      const form = document.getElementById('chat-form');
+      const input = document.getElementById('chat-input');
+      const windowEl = document.getElementById('chat-window');
 
-function appendMessage(role, text) {
-    const div = document.createElement('div');
-    div.className = role === 'user' ? 'text-right' : 'text-left';
-    const bubble = document.createElement('div');
-    bubble.className = 'inline-block p-3 rounded';
-    if (role === 'user') {
-        bubble.classList.add('bg-green-600', 'text-white');
-        bubble.textContent = text; // escape user text
-    } else {
-        bubble.classList.add('bg-gray-100', 'text-gray-800');
-        try {
-            // render assistant text as markdown -> HTML, then sanitize
-            const raw = (typeof marked !== 'undefined') ? marked.parse(text) : text;
-            const clean = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(raw) : raw;
-            bubble.innerHTML = clean;
-        } catch (e) {
-            bubble.textContent = text;
+      function appendMessage(text, who, isHtml=false){
+        const el = document.createElement('div');
+        el.className = 'bubble ' + (who === 'user' ? 'user' : 'ai');
+        if(isHtml && who !== 'user'){
+          // Render markdown -> HTML and sanitize before inserting
+          try{
+            const raw = marked.parse(text || '');
+            el.innerHTML = DOMPurify.sanitize(raw);
+          }catch(e){
+            el.textContent = text;
+          }
+        }else{
+          el.textContent = text;
         }
-    }
-    div.appendChild(bubble);
-    chatWindow.appendChild(div);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-}
+        windowEl.appendChild(el);
+        windowEl.scrollTop = windowEl.scrollHeight;
+        return el;
+      }
 
-chatForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const msg = chatInput.value.trim();
-    if (!msg) return;
-    appendMessage('user', msg);
-    chatInput.value = '';
-    chatError.style.display = 'none';
-    // UI: disable input and show typing placeholder
-    const sendBtn = document.getElementById('chat-send');
-    const status = document.getElementById('chat-status');
-    sendBtn.disabled = true;
-    chatInput.disabled = true;
-    status.style.display = 'block';
-    // insert a placeholder assistant message that we'll replace
-    const typingPlaceholder = document.createElement('div');
-    typingPlaceholder.className = 'text-left';
-    typingPlaceholder.id = 'typing-placeholder';
-    typingPlaceholder.innerHTML = `<div class="inline-block bg-gray-100 text-gray-800 p-3 rounded"><em>Assistant is thinking…</em></div>`;
-    chatWindow.appendChild(typingPlaceholder);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-    try {
-        const res = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msg })
-        });
-        const j = await res.json();
-        if (!res.ok) throw new Error(j.error || 'Request failed');
-        // replace typing placeholder with assistant reply
-        const parent = typingPlaceholder.parentElement;
-        if (parent) parent.removeChild(typingPlaceholder);
-        appendMessage('assistant', j.text || j.response || '')
-    } catch (err) {
-        // remove placeholder and show error
-        const ph = document.getElementById('typing-placeholder');
-        if (ph && ph.parentElement) ph.parentElement.removeChild(ph);
-        chatError.style.display = 'block';
-        chatError.textContent = 'Chat failed: ' + (err.message || err);
-    } finally {
-        sendBtn.disabled = false;
-        chatInput.disabled = false;
-        status.style.display = 'none';
-        chatInput.focus();
-    }
-});
+      async function sendMessage(){
+        const v = input.value.trim();
+        if(!v) return;
+        appendMessage(v, 'user');
+        input.value = '';
 
-// Suggested prompts and context loading
-async function loadContextPanel() {
-    try {
-        const res = await fetch('/api/chat/context');
-        if (!res.ok) return;
-        const ctx = await res.json();
-        const summary = document.getElementById('ctx-summary');
-        const topBills = document.getElementById('ctx-top-bills');
-        const actions = document.getElementById('ctx-actions');
-        if (!ctx || !ctx.user) {
-            summary.textContent = 'Not logged in or no data available.';
-            return;
+        // quick heuristic: if message starts with "spent" or contains a number + category, send to quick-add endpoint
+        const lower = v.toLowerCase();
+        if(lower.startsWith('spent') || /\d+/.test(lower) && /(on|for)/.test(lower)){
+          // POST to quick add endpoint (non-blocking); fallback to mock response
+          try{
+            await fetch('/transactions/quick', { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({text: v}) });
+            appendMessage('Added as a quick transaction (sent to server).', 'ai');
+          }catch(err){
+            appendMessage('Unable to reach server — saved locally (mock).', 'ai');
+          }
+          return;
         }
-        summary.innerHTML = `Total bills: <strong>${ctx.num_bills}</strong><br/>Monthly estimate: <strong>₹${(ctx.monthly_estimate_cents/100).toFixed(2)}</strong>`;
-        topBills.innerHTML = '';
-        // derive top 5 by amount
-        const bills = ctx.bills || [];
-        bills.sort((a,b)=> (b.amount_cents||0)-(a.amount_cents||0));
-        const top = bills.slice(0,5);
-        top.forEach(b => {
-            const li = document.createElement('li');
-            li.className = 'py-1 border-b border-gray-200';
-            li.innerHTML = `<div class="flex justify-between"><span>${b.name}</span><span>₹${((b.amount_cents||0)/100).toFixed(2)}</span></div>`;
-            topBills.appendChild(li);
-        });
-        // suggested actions
-        actions.innerHTML = '';
-        const suggested = [
-            'How much did I spend last month?',
-            'Top 3 largest bills',
-            'Which bills are recurring subscriptions?',
-            'Can you give personal budget recommendations based on my bill history?'
-        ];
-        const suggContainer = document.getElementById('suggested-prompts');
-        suggContainer.innerHTML = '';
-        suggested.forEach(s => {
-            // Suggested prompt chips in the chat area
-            const chip = document.createElement('button');
-            chip.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-100 text-sm';
-            chip.textContent = s;
-            chip.addEventListener('click', ()=>{
-                chatInput.value = s;
-                chatForm.dispatchEvent(new Event('submit', {cancelable: true}));
-            });
-            suggContainer.appendChild(chip);
 
-            // Full-width quick action button in the right panel
-            const act = document.createElement('button');
-            act.className = 'w-full text-left px-3 py-2 bg-white border rounded hover:bg-gray-100 text-sm';
-            act.textContent = s;
-            act.addEventListener('click', ()=>{ chatInput.value = s; chatForm.dispatchEvent(new Event('submit', {cancelable: true})); });
-            actions.appendChild(act);
-        });
-    } catch (e) {
-        console.error('ctx load err', e);
-    }
-}
+        // send message to server and show reply
+        const thinkingEl = appendMessage('Thinking…', 'ai', false);
 
-document.addEventListener('DOMContentLoaded', ()=>{ loadContextPanel(); });
-
-// adjust layout so left chat area and right context panel align under the header
-function adjustChatLayout() {
-    try {
-        const header = document.querySelector('main header');
-        const section = document.getElementById('chat-section');
-        const left = document.getElementById('chat-left');
-        const aside = document.getElementById('chat-context-panel');
-        const chatWindow = document.getElementById('chat-window');
-        if (!header || !section || !left || !aside || !chatWindow) return;
-        const rect = header.getBoundingClientRect();
-        const top = Math.ceil(rect.bottom); // number of pixels from viewport top
-        const avail = Math.max(200, window.innerHeight - top - 40); // reserve some room
-        // reduce overall heights slightly so the window feels less tall
-        const shrink = 80; // pixels to subtract from full available height
-        // set section to fill remaining viewport height below header minus shrink
-        section.style.minHeight = `calc(100vh - ${top + shrink}px)`;
-        // set left and aside heights to match (shorten by shrink)
-        left.style.height = `calc(100vh - ${top + shrink}px)`;
-        aside.style.height = `calc(100vh - ${top + shrink}px)`;
-        // compute reserved space dynamically from form and suggested prompts heights
-        const formEl = document.getElementById('chat-form');
-        const chips = document.getElementById('suggested-prompts');
-        let reserve = 140;
-        try {
-            const fh = formEl ? formEl.offsetHeight : 0;
-            const ch = chips ? chips.offsetHeight : 0;
-            // extra padding/margins
-            reserve = fh + ch + 32;
-        } catch (e) {
-            reserve = 140;
+        try{
+          const res = await fetch('/api/chat', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: v}) });
+          const body = await res.json();
+          if(res.ok && body.reply){
+            // Render assistant reply as sanitized markdown inside the same bubble
+            try{
+              const rendered = marked.parse(body.reply || '');
+              thinkingEl.innerHTML = DOMPurify.sanitize(rendered);
+            }catch(e){
+              thinkingEl.textContent = body.reply;
+            }
+          }else if(body.error){
+            thinkingEl.textContent = 'Error: ' + body.error;
+          }else{
+            thinkingEl.textContent = 'No reply from server.';
+          }
+        }catch(err){
+          thinkingEl.textContent = 'Unable to reach chat server.';
         }
-        // also subtract shrink from chat window max height so messages area is reduced
-        chatWindow.style.maxHeight = `calc(100vh - ${top + reserve + shrink}px)`;
-    } catch (e) {
-        console.warn('adjustChatLayout error', e);
-    }
-}
+        windowEl.scrollTop = windowEl.scrollHeight;
+      }
 
-window.addEventListener('resize', () => { adjustChatLayout(); });
-window.addEventListener('orientationchange', () => { adjustChatLayout(); });
-document.addEventListener('DOMContentLoaded', () => { adjustChatLayout(); });
+      form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        await sendMessage();
+      });
 
-// small CSS animation for spinner
-const style = document.createElement('style');
-style.textContent = `@keyframes chat-spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`;
-document.head.appendChild(style);
-</script>
+      // Send on Enter (no Shift) from the textarea
+      input.addEventListener('keydown', async (e) => {
+        if(e.key === 'Enter' && !e.shiftKey){
+          e.preventDefault();
+          await sendMessage();
+        }
+      });
+    </script>
 </body>
 </html>

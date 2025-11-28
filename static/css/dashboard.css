@@ -1,0 +1,10 @@
+.summary-cards{display:flex;gap:16px;margin-bottom:18px}
+.summary-cards .card{flex:1;display:flex;align-items:center}
+.card-icon{font-size:32px;margin-right:12px}
+.card-title{font-size:13px;color:var(--muted)}
+.card-value{font-size:20px;font-weight:700}
+.ai-insights{margin-bottom:18px}
+.insights-box{padding:16px;background:#fff;border-radius:8px}
+.panels{display:flex;gap:16px;margin-bottom:18px}
+.panel h3{margin-top:0}
+.recent-transactions .transactions-table{background:#fff;border-radius:8px}

@@ -3,14 +3,15 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from dotenv import load_dotenv
 from db import init_db, db
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import User, Bill, seed_defaults, AgentResult
+from models import User, Bill, Category, Transaction, ChatLog, AgentResult
 from datetime import datetime
 import csv
 import io
 import json
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, create_engine
 from sqlalchemy.exc import OperationalError
 from threading import Thread
+from agents.chat_agent import run_chat_agent
 
 def _compute_next_due_from(start_date, period, interval_count=1):
     if not start_date:
@@ -51,37 +52,42 @@ def _compute_next_due_from(start_date, period, interval_count=1):
 load_dotenv()
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret')
-init_db(app)
 
 
-@app.route('/api/overview/trigger-refresh', methods=['POST'])
-def api_overview_trigger_refresh():
+@app.route('/api/dashboard/trigger-refresh', methods=['POST'])
+def api_dashboard_trigger_refresh():
     user = get_current_user()
     if not user:
         return (jsonify({'error': 'authentication required'}), 401)
     return (jsonify({'status': 'accepted'}), 202)
 
 def get_current_user():
+    """Return the logged-in User or None.
+
+    This function is made resilient to transient DB connection closures by
+    retrying once after rolling back the session when an OperationalError occurs.
+    """
     user_id = session.get('user_id')
     if not user_id:
         return None
-    return User.query.get(user_id)
-
-
-def invalidate_chat_cache_for_user(user_id: str | None):
-    """Delete cached chat AgentResult rows for a given user.
-
-    This removes any AgentResult rows whose agent_key starts with 'chat_agent_v1:' for the user.
-    """
-    if not user_id:
-        return
     try:
-        # use SQLAlchemy query delete for efficiency
-        AgentResult.query.filter(AgentResult.user_id == user_id, AgentResult.agent_key.like('chat_agent_v1:%')).delete(synchronize_session=False)
-        db.session.commit()
+        return User.query.get(user_id)
+    except OperationalError as oe:
+        # transient DB issue: rollback and retry once
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            return User.query.get(user_id)
+        except Exception:
+            # give up and return None so routes can redirect to login gracefully
+            return None
     except Exception:
-        db.session.rollback()
-        return
+        return None
+
+
+# Agent cache/invalidation removed — agents are disabled in this build
 
 @app.route('/')
 def index():
@@ -103,7 +109,7 @@ def signup():
     db.session.commit()
     session['user_id'] = user.id
     flash('Account created. Welcome!', 'success')
-    return redirect(url_for('overview'))
+    return redirect(url_for('dashboard'))
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -118,7 +124,7 @@ def login():
         return redirect(url_for('index'))
     session['user_id'] = user.id
     flash('Logged in successfully.', 'success')
-    return redirect(url_for('overview'))
+    return redirect(url_for('dashboard'))
 
 @app.route('/logout')
 def logout():
@@ -126,12 +132,25 @@ def logout():
     flash('Logged out.', 'info')
     return redirect(url_for('index'))
 
-@app.route('/overview')
-def overview():
+@app.route('/dashboard')
+def dashboard():
     user = get_current_user()
     if not user:
         return redirect(url_for('index'))
-    return render_template('overview.html')
+    return render_template('dashboard.html')
+
+
+@app.route('/_debug/whoami')
+def _debug_whoami():
+    """Return session user id and whether the User exists (debug helper)."""
+    uid = session.get('user_id')
+    user = None
+    try:
+        if uid:
+            user = User.query.get(uid)
+    except Exception as e:
+        return jsonify({'session_user_id': uid, 'error': str(e)})
+    return jsonify({'session_user_id': uid, 'user_exists': bool(user), 'user': user.to_dict() if user else None})
 
 
 @app.route('/chat')
@@ -142,43 +161,41 @@ def chat():
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
-    data = request.get_json() or {}
-    message = data.get('message')
-    if not message:
-        return (jsonify({'error': 'message is required'}), 400)
-    try:
-        # delegate to agents.chat_agent which handles context collection and caching
-        from agents.chat_agent import generate_chat_response
-        user = get_current_user()
-        user_id = user.id if user else None
-        out = generate_chat_response(user_id, message, use_cache=True)
-        return jsonify(out)
-    except Exception as e:
-        return (jsonify({'error': str(e)}), 500)
-
-
-@app.route('/api/chat/context')
-def api_chat_context():
-    """Return a small JSON context object for the logged-in user.
-
-    This is used by the chat UI to populate the right-hand context panel.
+    """Minimal chat endpoint: accepts JSON {message: '...'} and returns {'reply': '...'}.
+    This endpoint is intentionally read-only and does not write to the database.
     """
     user = get_current_user()
     if not user:
-        return jsonify({'user': None, 'bills': [], 'total_amount_cents': 0, 'monthly_estimate_cents': 0, 'num_bills': 0})
+        return jsonify({'error': 'authentication required'}), 401
+
+    data = request.get_json(silent=True) or {}
+    message = data.get('message') if isinstance(data, dict) else None
+    if not message:
+        return jsonify({'error': 'no message provided'}), 400
+
+    # Save user message to chat log (read-only agent still logs conversational history)
     try:
-        bills = Bill.query.filter_by(user_id=user.id).order_by(Bill.created_at.desc()).limit(50).all()
-        bill_dicts = [b.to_dict() for b in bills]
-        total_cents = sum((b.amount_cents or 0) for b in bills)
-        monthly_estimate = 0
-        for b in bills:
-            if b.period == 'monthly' or b.period is None:
-                monthly_estimate += (b.amount_cents or 0)
-            elif b.period == 'yearly':
-                monthly_estimate += (b.amount_cents or 0) / 12.0
-        return jsonify({'user': {'id': user.id, 'email': user.email}, 'bills': bill_dicts, 'total_amount_cents': int(total_cents), 'monthly_estimate_cents': int(monthly_estimate), 'num_bills': len(bill_dicts)})
-    except Exception as e:
-        return (jsonify({'error': str(e)}), 500)
+        ul = ChatLog(user_id=user.id, role='user', content=message)
+        db.session.add(ul)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # Call DB-backed chat agent
+    reply = run_chat_agent(user.id, message)
+
+    # Save assistant reply
+    try:
+        al = ChatLog(user_id=user.id, role='assistant', content=reply)
+        db.session.add(al)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return jsonify({'reply': reply})
+
+
+# Chat agent endpoints removed — agents disabled in this workspace
 
 @app.route('/bills', methods=['GET'])
 def bills():
@@ -202,7 +219,470 @@ def bills():
                     b.next_due = computed
         except Exception:
             continue
-    return render_template('bills.html', bills=bills)
+    return render_template('transaction.html', bills=bills)
+
+
+@app.route('/add')
+def add_data():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    return render_template('add_data.html')
+
+
+@app.route('/transactions')
+def transactions_page():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    bills_list = Bill.query.filter_by(user_id=user.id).order_by(Bill.next_due.asc().nulls_last()).all()
+    transactions = Transaction.query.filter_by(user_id=user.id).order_by(Transaction.occurred_at.desc()).all()
+    # build a lightweight view-friendly list to avoid template attribute errors
+    transactions_view = []
+    for t in transactions:
+        try:
+            cat = None
+            if t.category_id:
+                cat = Category.query.get(t.category_id)
+            transactions_view.append({
+                'id': t.id,
+                'amount_cents': t.amount_cents,
+                'amount': t.amount_cents / 100.0,
+                'txn_type': t.txn_type,
+                'description': t.description,
+                'category_name': cat.name if cat else None,
+                'occurred_at': t.occurred_at,
+                'meta': t.meta
+            })
+        except Exception:
+            transactions_view.append({
+                'id': t.id,
+                'amount_cents': t.amount_cents,
+                'amount': t.amount_cents / 100.0,
+                'txn_type': t.txn_type,
+                'description': t.description,
+                'category_name': None,
+                'occurred_at': t.occurred_at,
+                'meta': t.meta
+            })
+    # build list of unique category names for the filter dropdown
+    category_names = sorted({tv['category_name'] for tv in transactions_view if tv.get('category_name')})
+    return render_template('transaction.html', bills=bills_list, transactions=transactions_view, categories=category_names)
+
+
+@app.route('/api/transactions/recent')
+def api_transactions_recent():
+    """Return last 5 transactions for current user as JSON."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    try:
+        txns = Transaction.query.filter_by(user_id=user.id).order_by(Transaction.occurred_at.desc()).limit(5).all()
+        out = []
+        for t in txns:
+            cat = None
+            if t.category_id:
+                c = Category.query.get(t.category_id)
+                cat = c.name if c else None
+            out.append({
+                'id': t.id,
+                'txn_type': t.txn_type,
+                'category': cat,
+                'amount_cents': t.amount_cents,
+                'amount': round((t.amount_cents or 0)/100,2),
+                'occurred_at': t.occurred_at.isoformat() if t.occurred_at else None,
+                'description': t.description,
+                'meta': t.meta
+            })
+        return jsonify({'transactions': out})
+    except OperationalError as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'error': 'database error', 'details': str(e)}), 500
+
+
+@app.route('/api/dashboard/summary')
+def api_dashboard_summary():
+    """Return monthly totals and simple utilization for the current user.
+
+    Response shape:
+    {
+      monthly: { income: int, expense: int, net: int },
+      upcoming_bills: [ {id,name,next_due,amount_cents} ... ],
+      utilization: { essentials_pct, discretionary_pct }
+    }
+    """
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    try:
+        now = datetime.utcnow()
+        start_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # sum incomes and expenses for current month
+        incomes = db.session.query(db.func.coalesce(db.func.sum(Transaction.amount_cents), 0)).filter(Transaction.user_id == user.id, Transaction.txn_type == 'income', Transaction.occurred_at >= start_month).scalar() or 0
+        expenses = db.session.query(db.func.coalesce(db.func.sum(Transaction.amount_cents), 0)).filter(Transaction.user_id == user.id, Transaction.txn_type == 'expense', Transaction.occurred_at >= start_month).scalar() or 0
+        incomes = int(incomes)
+        expenses = int(expenses)
+
+        # upcoming bills in this month or next 7 days
+        upcoming = []
+        bills = Bill.query.filter_by(user_id=user.id, active=True).all()
+        for b in bills:
+            if not b.next_due:
+                continue
+            nd = b.next_due
+            days_left = (nd.date() - now.date()).days
+            # include if in current month
+            if nd.year == now.year and nd.month == now.month:
+                upcoming.append({'id': b.id, 'name': b.name, 'next_due': nd.isoformat(), 'amount_cents': b.amount_cents})
+            # also include if within next 7 days
+            elif 0 <= days_left <= 7:
+                upcoming.append({'id': b.id, 'name': b.name, 'next_due': nd.isoformat(), 'amount_cents': b.amount_cents})
+
+        # simple utilization mock: essentials = 60% of expenses, discretionary 40% (placeholder)
+        util = {'essentials_pct': 60, 'discretionary_pct': 40}
+
+        return jsonify({'monthly': {'income': incomes//1, 'expense': expenses//1, 'net': (incomes - expenses)//1}, 'upcoming_bills': upcoming, 'utilization': util})
+    except OperationalError as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'error': 'database error', 'details': str(e)}), 500
+
+
+@app.route('/api/notifications/json')
+def api_notifications_json():
+    """Produce a simple notifications JSON derived from the bills table (no Notification model required).
+
+    Returns: { notifications: [ {id,title,type,meta,created_at} ] }
+    """
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    try:
+        now = datetime.utcnow()
+        notes = []
+        bills = Bill.query.filter_by(user_id=user.id, active=True).all()
+        for b in bills:
+            if not b.next_due:
+                continue
+            nd = b.next_due
+            days_left = (nd.date() - now.date()).days
+            meta = {'bill_id': b.id, 'due_date': nd.isoformat(), 'amount_cents': b.amount_cents}
+            if days_left < 0:
+                notes.append({'id': b.id, 'title': f"{b.name}", 'type': 'bill_overdue', 'meta': meta, 'created_at': b.created_at.isoformat() if b.created_at else None})
+            elif days_left == 0:
+                notes.append({'id': b.id, 'title': f"{b.name}", 'type': 'bill_due_today', 'meta': meta, 'created_at': b.created_at.isoformat() if b.created_at else None})
+            elif 1 <= days_left <= 7:
+                notes.append({'id': b.id, 'title': f"{b.name}", 'type': 'bill_upcoming_week', 'meta': meta, 'created_at': b.created_at.isoformat() if b.created_at else None})
+            elif nd.year == now.year and nd.month == now.month:
+                notes.append({'id': b.id, 'title': f"{b.name}", 'type': 'bill_upcoming_month', 'meta': meta, 'created_at': b.created_at.isoformat() if b.created_at else None})
+
+        return jsonify({'notifications': notes})
+    except OperationalError as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'error': 'database error', 'details': str(e)}), 500
+
+
+@app.route('/transactions/<txn_id>/edit', methods=['POST'])
+def edit_transaction(txn_id):
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    txn = Transaction.query.filter_by(id=txn_id, user_id=user.id).first()
+    if not txn:
+        flash('Transaction not found.', 'error')
+        return redirect(url_for('transactions_page'))
+    amount = request.form.get('amount')
+    try:
+        amount_cents = int(float(amount) * 100)
+    except Exception:
+        amount_cents = txn.amount_cents
+    occurred_at = request.form.get('occurred_at')
+    if occurred_at:
+        try:
+            txn.occurred_at = datetime.fromisoformat(occurred_at)
+        except Exception:
+            pass
+    description = request.form.get('description')
+    if description is not None:
+        txn.description = description
+    category_name = request.form.get('category')
+    if category_name:
+        cat = get_or_create_category(user, category_name)
+        txn.category_id = cat.id if cat else None
+    txn.amount_cents = amount_cents
+    txn.txn_type = request.form.get('txn_type') or txn.txn_type
+    # meta fields (payment_mode/source)
+    meta = txn.meta or {}
+    payment_mode = request.form.get('payment_mode')
+    if payment_mode:
+        meta['payment_mode'] = payment_mode
+    source = request.form.get('source')
+    if source:
+        meta['source'] = source
+    txn.meta = meta
+    db.session.commit()
+    flash('Transaction updated.', 'success')
+    return redirect(url_for('transactions_page'))
+
+
+@app.route('/transactions/<txn_id>/delete', methods=['POST'])
+def delete_transaction(txn_id):
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    txn = Transaction.query.filter_by(id=txn_id, user_id=user.id).first()
+    if not txn:
+        flash('Transaction not found.', 'error')
+        return redirect(url_for('transactions_page'))
+    db.session.delete(txn)
+    db.session.commit()
+    flash('Transaction deleted.', 'success')
+    return redirect(url_for('transactions_page'))
+
+
+@app.route('/api/transactions')
+def api_transactions():
+    """Return JSON with bills and transactions for the current user (debug / useful for frontend checks)."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    bills = Bill.query.filter_by(user_id=user.id).order_by(Bill.next_due.asc().nulls_last()).all()
+    txns = Transaction.query.filter_by(user_id=user.id).order_by(Transaction.occurred_at.desc()).all()
+    bills_out = []
+    for b in bills:
+        bills_out.append({'id': b.id, 'name': b.name, 'description': b.description, 'amount_cents': b.amount_cents, 'next_due': b.next_due.isoformat() if b.next_due else None})
+    txns_out = []
+    for t in txns:
+        txns_out.append({'id': t.id, 'txn_type': t.txn_type, 'amount_cents': t.amount_cents, 'description': t.description, 'category_id': t.category_id, 'occurred_at': t.occurred_at.isoformat() if t.occurred_at else None, 'meta': t.meta})
+    return jsonify({'bills': bills_out, 'transactions': txns_out})
+
+
+def get_or_create_category(user, name):
+    if not name:
+        return None
+    name = name.strip()
+    if not name:
+        return None
+    try:
+        cat = None
+        if user:
+            cat = Category.query.filter_by(user_id=user.id, name=name).first()
+        if not cat:
+            cat = Category.query.filter_by(user_id=None, name=name).first()
+        if cat:
+            return cat
+        cat = Category(user_id=user.id if user else None, name=name)
+        db.session.add(cat)
+        db.session.commit()
+        return cat
+    except Exception:
+        db.session.rollback()
+        return None
+
+
+@app.route('/transactions/create', methods=['POST'])
+def create_transaction():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    txn_type = request.form.get('txn_type') or request.form.get('type') or 'expense'
+    amount = request.form.get('amount')
+    try:
+        amount_cents = int(float(amount) * 100)
+    except Exception:
+        amount_cents = 0
+    occurred_at = request.form.get('occurred_at')
+    occurred = None
+    if occurred_at:
+        try:
+            occurred = datetime.fromisoformat(occurred_at)
+        except Exception:
+            occurred = datetime.utcnow()
+    else:
+        occurred = datetime.utcnow()
+    description = request.form.get('description')
+    category_name = request.form.get('category')
+    category = get_or_create_category(user, category_name) if category_name else None
+    meta = {}
+    payment_mode = request.form.get('payment_mode')
+    if payment_mode:
+        meta['payment_mode'] = payment_mode
+    source = request.form.get('source')
+    if source:
+        meta['source'] = source
+    txn = Transaction(user_id=user.id, txn_type=txn_type, amount_cents=amount_cents, occurred_at=occurred, description=description, currency='INR', category_id=(category.id if category else None), meta=meta)
+    try:
+        db.session.add(txn)
+        db.session.commit()
+        flash('Transaction added.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error adding transaction: ' + str(e), 'error')
+    return redirect(url_for('add_data'))
+
+
+@app.route('/transactions/quick', methods=['POST'])
+def transaction_quick():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    text = request.form.get('text', '').strip()
+    if not text:
+        flash('Enter quick text.', 'error')
+        return redirect(url_for('add_data'))
+    # simple amount parse
+    import re
+    m = re.search(r"(\d+(?:\.\d{1,2})?)", text)
+    amount_cents = 0
+    if m:
+        try:
+            amount_cents = int(float(m.group(1)) * 100)
+        except Exception:
+            amount_cents = 0
+    # try match category from user's categories
+    category = None
+    try:
+        candidates = Category.query.filter((Category.user_id == user.id) | (Category.user_id == None)).all()
+        lt = text.lower()
+        for c in candidates:
+            if c.name and c.name.lower() in lt:
+                category = c
+                break
+    except Exception:
+        category = None
+    txn_type = 'expense' if amount_cents > 0 else 'expense'
+    txn = Transaction(user_id=user.id, txn_type=txn_type, amount_cents=amount_cents, occurred_at=datetime.utcnow(), description=text, currency='INR', category_id=(category.id if category else None), meta={'source': 'quick_add'})
+    try:
+        db.session.add(txn)
+        db.session.commit()
+        flash('Quick transaction added.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error adding quick transaction: ' + str(e), 'error')
+    return redirect(url_for('add_data'))
+
+
+@app.route('/_seed_demo')
+def seed_demo():
+    """Development-only: seed demo user, categories, bills, and transactions."""
+    # only allow in debug mode to avoid accidental production use
+    if not app.debug:
+        return jsonify({'error': 'seeding only allowed in debug mode'}), 403
+
+    demo_email = 'demo@billbot.local'
+    demo = User.query.filter_by(email=demo_email).first()
+    if not demo:
+        demo = User(email=demo_email, password_hash=generate_password_hash('demo'))
+        db.session.add(demo)
+        db.session.commit()
+
+    # avoid reseeding if enough data exists
+    existing_txn_count = Transaction.query.filter_by(user_id=demo.id).count()
+    existing_bills = Bill.query.filter_by(user_id=demo.id).count()
+    if existing_txn_count >= 20 and existing_bills >= 10:
+        return jsonify({'status': 'already seeded', 'transactions': existing_txn_count, 'bills': existing_bills})
+
+    # categories
+    cat_names = ['Groceries','Dining Out','Transport','Fuel','Rent','Utilities - Electricity','Internet','Phone','Education','Healthcare','Insurance','Entertainment','Clothing','Home Improvement','Subscriptions']
+    categories = {}
+    for name in cat_names:
+        c = get_or_create_category(demo, name)
+        if c:
+            categories[name] = c
+
+    # create 10 representative bills (monthly or yearly)
+    from datetime import timedelta
+    now = datetime.utcnow()
+    bills_data = [
+        {'name':'Monthly Rent','amount':25000,'interval_unit':'months','interval_count':1},
+        {'name':'Electricity','amount':3500,'interval_unit':'months','interval_count':1},
+        {'name':'Water','amount':400,'interval_unit':'months','interval_count':1},
+        {'name':'Internet','amount':999,'interval_unit':'months','interval_count':1},
+        {'name':'Mobile Phone','amount':699,'interval_unit':'months','interval_count':1},
+        {'name':'Gym Membership','amount':1200,'interval_unit':'months','interval_count':1},
+        {'name':'House Insurance','amount':6000,'interval_unit':'year','interval_count':1},
+        {'name':'Streaming Subscriptions','amount':499,'interval_unit':'months','interval_count':1},
+        {'name':'Property Tax','amount':8000,'interval_unit':'year','interval_count':1},
+        {'name':'Car Loan','amount':8000,'interval_unit':'months','interval_count':1},
+    ]
+
+    created_bills = []
+    for b in bills_data:
+        amount_cents = int(b['amount'] * 100)
+        # set last_paid one month ago for recurring monthly bills
+        last_paid = now - timedelta(days=30)
+        bill = Bill(user_id=demo.id, name=b['name'], description=f"Auto-seeded {b['name']}", amount_cents=amount_cents, currency='INR', reminder_text=None, schedule_type=b.get('schedule_type'), interval_count=b.get('interval_count',1), interval_unit=b.get('interval_unit','months'), active=True, last_paid=last_paid, next_due=None, due_date=None)
+        db.session.add(bill)
+        created_bills.append(bill)
+    db.session.commit()
+
+    # create 20 transactions (10 expenses, 10 incomes) distributed over recent 60 days
+    import random
+    txn_categories = list(categories.values())
+    incomes = [
+        {'desc':'Salary - Acme Corp','amount':50000},
+        {'desc':'Spouse Salary - HomeTech','amount':42000},
+        {'desc':'Freelance Project','amount':8000},
+        {'desc':'Interest Income','amount':200},
+        {'desc':'Gift Received','amount':1500},
+        {'desc':'Rental Income','amount':8000},
+        {'desc':'Bonus','amount':6000},
+        {'desc':'Investment Dividend','amount':1200},
+        {'desc':'Selling Old Items','amount':900},
+        {'desc':'Tax Refund','amount':3000},
+    ]
+    expenses = [
+        {'desc':'Grocery shopping at BigMart','amount':5200,'cat':'Groceries'},
+        {'desc':'Dinner out with family','amount':1800,'cat':'Dining Out'},
+        {'desc':'Monthly fuel topup','amount':3000,'cat':'Fuel'},
+        {'desc':'Bus/Train passes','amount':600,'cat':'Transport'},
+        {'desc':'Movie night','amount':800,'cat':'Entertainment'},
+        {'desc':'Clothes shopping','amount':2400,'cat':'Clothing'},
+        {'desc':'Phone bill payment','amount':699,'cat':'Phone'},
+        {'desc':'Internet bill','amount':999,'cat':'Internet'},
+        {'desc':'Medicine and clinic visit','amount':1200,'cat':'Healthcare'},
+        {'desc':'Household supplies','amount':950,'cat':'Home Improvement'},
+    ]
+
+    # spread dates
+    txns_created = []
+    for i in range(10):
+        inc = incomes[i]
+        amt = int(inc['amount']*100)
+        days_ago = random.randint(1,60)
+        occurred = now - timedelta(days=days_ago)
+        txn = Transaction(user_id=demo.id, txn_type='income', amount_cents=amt, occurred_at=occurred, description=inc['desc'], currency='INR', meta={'source':'seed'})
+        db.session.add(txn)
+        txns_created.append(txn)
+    for i in range(10):
+        exp = expenses[i]
+        amt = int(exp['amount']*100)
+        days_ago = random.randint(1,60)
+        occurred = now - timedelta(days=days_ago)
+        cat = categories.get(exp.get('cat'))
+        txn = Transaction(user_id=demo.id, txn_type='expense', amount_cents=amt, occurred_at=occurred, description=exp['desc'], currency='INR', category_id=(cat.id if cat else None), meta={'source':'seed'})
+        db.session.add(txn)
+        txns_created.append(txn)
+
+    db.session.commit()
+
+    return jsonify({'status':'seeded','user':demo.email,'bills':len(created_bills),'transactions':len(txns_created)})
+
+
+@app.route('/agents')
+def agents_center():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    return render_template('agents.html')
 
 @app.route('/bills/create', methods=['POST'])
 def create_bill():
@@ -232,11 +712,6 @@ def create_bill():
     db.session.add(bill)
     db.session.commit()
     flash('Bill created.', 'success')
-    # Invalidate chat cache for this user so assistant uses fresh data
-    try:
-        invalidate_chat_cache_for_user(user.id)
-    except Exception:
-        pass
     return redirect(url_for('bills'))
 
 @app.route('/bills/<bill_id>/edit', methods=['POST'])
@@ -278,11 +753,6 @@ def edit_bill(bill_id):
     bill.due_date = next_due
     db.session.commit()
     flash('Bill updated.', 'success')
-    # Invalidate chat cache for this user
-    try:
-        invalidate_chat_cache_for_user(user.id)
-    except Exception:
-        pass
     return redirect(url_for('bills'))
 
 @app.route('/bills/<bill_id>/delete', methods=['POST'])
@@ -297,167 +767,50 @@ def delete_bill(bill_id):
     db.session.delete(bill)
     db.session.commit()
     flash('Bill deleted.', 'success')
-    # Invalidate chat cache for this user
-    try:
-        invalidate_chat_cache_for_user(user.id)
-    except Exception:
-        pass
     return redirect(url_for('bills'))
 
-@app.route('/profile')
-def profile():
+@app.route('/notifications')
+def notifications():
     user = get_current_user()
     if not user:
         return redirect(url_for('index'))
-    session['user_email'] = user.email
-    return render_template('profile.html')
+    return render_template('notifications.html')
 
-@app.route('/update-profile', methods=['POST'])
-def update_profile():
-    user = get_current_user()
-    if not user:
-        return redirect(url_for('index'))
-    email = request.form.get('email')
-    current_password = request.form.get('current_password')
-    new_password = request.form.get('new_password')
-    if not check_password_hash(user.password_hash, current_password):
-        flash('Current password is incorrect.', 'error')
-        return redirect(url_for('profile'))
-    if email != user.email:
-        existing = User.query.filter_by(email=email).first()
-        if existing:
-            flash('Email already registered.', 'error')
-            return redirect(url_for('profile'))
-        user.email = email
-    if new_password:
-        user.password_hash = generate_password_hash(new_password)
-    db.session.commit()
-    flash('Profile updated successfully.', 'success')
-    return redirect(url_for('profile'))
-
-@app.route('/settings')
-def settings():
-    user = get_current_user()
-    if not user:
-        return redirect(url_for('index'))
-    return render_template('settings.html')
-
-@app.route('/export-data')
-def export_data():
-    user = get_current_user()
-    if not user:
-        return redirect(url_for('index'))
-    bills = Bill.query.filter_by(user_id=user.id).all()
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['Name', 'Description', 'Tag', 'Payment Mode', 'Amount', 'Period', 'Last Paid', 'Next Due', 'Created At'])
-    for bill in bills:
-        writer.writerow([bill.name, bill.description or '', bill.tag or '', bill.payment_mode or '', f'₹{bill.amount_cents / 100:.2f}', bill.period or '', bill.last_paid.strftime('%Y-%m-%d') if bill.last_paid else '', bill.next_due.strftime('%Y-%m-%d') if bill.next_due else '', bill.created_at.strftime('%Y-%m-%d %H:%M:%S')])
-    output.seek(0)
-    return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': f"attachment; filename=billbot_data_{datetime.now().strftime('%Y%m%d')}.csv"})
-
-@app.route('/api/overview/data')
-def api_overview_data():
+@app.route('/api/dashboard/data')
+def api_dashboard_data():
+    # Dashboard data endpoint removed — agents and cached visualizations are disabled.
     user = get_current_user()
     if not user:
         return (jsonify({'error': 'authentication required'}), 401)
-    vp_row = AgentResult.query.filter_by(agent_key='visual_prep_agent_v1', user_id=user.id).order_by(AgentResult.created_at.desc()).first()
-    n_row = AgentResult.query.filter_by(agent_key='narration_agent_v1', user_id=user.id).order_by(AgentResult.created_at.desc()).first()
-    charts = None
-    narration = None
-    try:
-        if vp_row:
-            charts = json.loads(vp_row.payload)
-    except Exception:
-        charts = None
-    try:
-        if n_row:
-            narration = json.loads(n_row.payload)
-    except Exception:
-        narration = None
-    latest_bill = Bill.query.filter_by(user_id=user.id).order_by(Bill.created_at.desc()).first()
-    needs_recompute = False
-    if latest_bill:
-        latest_ts = latest_bill.created_at
-        if not vp_row or (vp_row and vp_row.created_at < latest_ts) or (not n_row) or (n_row and n_row.created_at < latest_ts):
-            needs_recompute = True
-    try:
-        force = request.args.get('force')
-        if force and str(force).lower() in ('1', 'true', 'yes'):
-            needs_recompute = True
-    except Exception:
-        pass
-    return jsonify({'charts': charts, 'narration': narration})
+    return jsonify({'charts': None, 'narration': None})
 
-@app.route('/delete-account', methods=['POST'])
-def delete_account():
-    user = get_current_user()
-    if not user:
-        return redirect(url_for('index'))
-    # remove bills, agent results and user
-    Bill.query.filter_by(user_id=user.id).delete()
-    AgentResult.query.filter_by(user_id=user.id).delete()
-    db.session.delete(user)
-    db.session.commit()
-    session.clear()
-    flash('Account deleted successfully.', 'info')
-    return redirect(url_for('index'))
 if __name__ == '__main__':
 
     def safe_startup():
+        # Decide which DB URI to use by testing the configured DATABASE_URL first
+        configured = os.environ.get('DATABASE_URL') or 'sqlite:///dev.db'
+        final_uri = configured
         try:
-            with app.app_context():
-                with db.engine.connect() as conn:
-                    conn.execute(text('SELECT 1'))
+            test_engine = create_engine(configured)
+            with test_engine.connect() as conn:
+                conn.execute(text('SELECT 1'))
+            print(f'Using database: {configured}')
         except OperationalError as e:
             print('Database connection failed:', e)
-            current_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-            if current_uri and current_uri.startswith('sqlite'):
+            if configured.startswith('sqlite'):
                 print('SQLite database configured but connection failed. Exiting.')
                 raise
-            fallback = 'sqlite:///dev_fallback.db'
-            print(f'Falling back to local SQLite DB at {fallback}')
-            app.config['SQLALCHEMY_DATABASE_URI'] = fallback
-            db.init_app(app)
+            final_uri = 'sqlite:///dev_fallback.db'
+            print(f'Falling back to local SQLite DB at {final_uri}')
+
+        # Configure and initialize the Flask-SQLAlchemy extension once
+        app.config['SQLALCHEMY_DATABASE_URI'] = final_uri
+        init_db(app)
+
         with app.app_context():
             try:
                 db.create_all()
             except Exception as e:
                 print('Error during db.create_all():', e)
-            inspector = inspect(db.engine)
-            try:
-                cols = {c['name'] for c in inspector.get_columns('bills')}
-            except Exception:
-                cols = set()
-            is_sqlite = str(db.engine.url).startswith('sqlite')
-            if is_sqlite:
-                want = {'tag_id': 'TEXT', 'default_payment_mode_id': 'TEXT', 'currency': "TEXT DEFAULT 'INR'", 'schedule_type': 'TEXT', 'interval_count': 'INTEGER', 'interval_unit': "TEXT DEFAULT 'months'", 'active': 'BOOLEAN', 'period': 'TEXT', 'last_paid': 'DATETIME', 'next_due': 'DATETIME', 'due_date': 'DATETIME', 'created_at': 'DATETIME'}
-            else:
-                want = {'tag_id': 'VARCHAR(36)', 'default_payment_mode_id': 'VARCHAR(36)', 'currency': "VARCHAR(10) DEFAULT 'INR'", 'schedule_type': 'VARCHAR(32)', 'interval_count': 'INTEGER DEFAULT 1', 'interval_unit': "VARCHAR(16) DEFAULT 'months'", 'active': 'BOOLEAN DEFAULT true', 'period': 'VARCHAR(50)', 'last_paid': 'TIMESTAMP', 'next_due': 'TIMESTAMP', 'due_date': 'TIMESTAMP', 'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'}
-            with db.engine.begin() as conn:
-                for col, coltype in want.items():
-                    if col not in cols:
-                        stmt = text(f'ALTER TABLE bills ADD COLUMN {col} {coltype}')
-                        try:
-                            conn.execute(stmt)
-                            print(f'Added missing column bills.{col}')
-                        except Exception as e:
-                            print(f'Could not add column {col}:', e)
-            try:
-                pm_cols = {c['name'] for c in inspector.get_columns('payment_modes')}
-            except Exception:
-                pm_cols = set()
-            if 'color_class' not in pm_cols:
-                coltype = 'TEXT' if is_sqlite else 'VARCHAR(64)'
-                try:
-                    with db.engine.begin() as conn:
-                        conn.execute(text(f'ALTER TABLE payment_modes ADD COLUMN color_class {coltype}'))
-                        print('Added missing column payment_modes.color_class')
-                except Exception as e:
-                    print('Could not add payment_modes.color_class:', e)
-            try:
-                seed_defaults(app)
-            except Exception as e:
-                print('Warning: seed_defaults failed during startup:', e)
     safe_startup()
     app.run(debug=True, host='127.0.0.1', port=5000)
