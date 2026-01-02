@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Dashboard • BillBot</title>
+  <title>Dashboard • FinAssist</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/overview.css') }}">
   <style>
@@ -24,7 +24,10 @@
     <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
       <div>
         <div class="text-sm text-gray-500">Welcome, <span class="font-semibold">{{ session.get('user_email') or 'Friend' }}</span></div>
-        <div class="text-xs text-gray-400" id="dashboard-date"></div>
+        <div class="flex items-center gap-2">
+          <div class="text-xs text-gray-400" id="dashboard-date"></div>
+          <button id="dashboard-refresh" title="Refresh dashboard" class="text-xs px-2 py-1 bg-gray-100 rounded">Refresh</button>
+        </div>
       </div>
       <div class="text-right">
         <div class="text-base font-semibold">Dashboard</div>
@@ -43,11 +46,14 @@
           <div class="card p-5 h-full flex flex-col min-h-72">
             <div class="flex items-center justify-between">
               <h2 class="text-lg font-semibold">🧠 AI Insights</h2>
-              <div class="text-sm muted">Source: mock agent_results &middot; insight_agent_v1</div>
+              <div class="flex items-center gap-3">
+                <div class="text-sm muted" id="insights-source">Source: insight_agent_v1</div>
+                <button id="run-insights" class="px-3 py-1 bg-green-600 text-white rounded text-sm">Run Insights</button>
+              </div>
             </div>
             <div class="mt-4 grid grid-cols-4 gap-4">
               <div class="col-span-2">
-                <div class="text-sm muted">Top spending category</div>
+                <div class="text-sm muted">Biggest expense</div>
                 <div id="insight-top-category" class="text-xl font-bold mt-1">—</div>
               </div>
               <div>
@@ -55,7 +61,7 @@
                 <div id="insight-wow" class="text-lg font-semibold mt-1">—</div>
               </div>
               <div>
-                <div class="text-sm muted">Biggest expense</div>
+                <div class="text-sm muted">Lowest expense</div>
                 <div id="insight-biggest" class="text-lg font-semibold mt-1">—</div>
               </div>
             </div>
@@ -75,7 +81,10 @@
           <div class="card p-5 h-full flex flex-col min-h-72">
             <div class="flex items-center justify-between">
               <h2 class="text-lg font-semibold">📈 AI Forecast (Next Month)</h2>
-              <div class="text-sm muted">Source: mock agent_results &middot; forecast_agent_v1</div>
+              <div class="flex items-center gap-3">
+                <div class="text-sm muted" id="forecast-source">Source: forecast_agent_v1</div>
+                <button id="run-forecast" class="px-3 py-1 bg-green-600 text-white rounded text-sm">Run Forecast</button>
+              </div>
             </div>
             <div class="mt-4 grid grid-cols-3 gap-4">
               <div>
@@ -101,7 +110,7 @@
           <div class="card p-5 h-full flex flex-col">
             <div class="flex items-center justify-between">
               <h2 class="text-lg font-semibold">🔔 Bill Reminders</h2>
-              <div class="text-sm muted">Source: mock agent_results &middot; reminder_agent_v1 & notifications</div>
+              <div class="text-sm muted">Source: reminder_agent_v1 & notifications</div>
             </div>
             <div class="mt-3" id="reminder-ai-block">—</div>
             <div class="mt-4 grid grid-cols-3 gap-4">
@@ -120,96 +129,29 @@
             </div>
           </div>
 
-          <!-- Monthly Summary & Savings Goal (1x2 grid) -->
-          <div class="grid grid-cols-2 gap-6 items-stretch">
-            <div class="card p-5 h-full flex flex-col">
-              <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold">💸 Monthly Summary</h2>
-                <div class="text-sm muted">Transactions summary (mock)</div>
-              </div>
-              <div class="mt-4 grid grid-cols-3 gap-4">
-                <div class="p-4 rounded border">
-                  <div class="text-sm muted">Total Expense</div>
-                  <div id="sum-expense" class="text-2xl font-bold text-red-600 mt-2">—</div>
-                </div>
-                <div class="p-4 rounded border">
-                  <div class="text-sm muted">Total Income</div>
-                  <div id="sum-income" class="text-2xl font-bold text-green-600 mt-2">—</div>
-                </div>
-                <div class="p-4 rounded border">
-                  <div class="text-sm muted">Net Savings</div>
-                  <div id="sum-net" class="text-2xl font-bold text-blue-600 mt-2">—</div>
-                </div>
-              </div>
+          <!-- Monthly Summary (single card) -->
+          <div class="card p-5 h-full flex flex-col">
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-semibold">💸 Monthly Summary</h2>
+              <div class="text-sm muted">Transactions summary</div>
             </div>
-            <div class="card p-5 h-full flex flex-col">
-              <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold">🎯 Savings Goal</h2>
-                <div class="text-sm muted">Progress</div>
+            <div class="mt-4 grid grid-cols-3 gap-4">
+              <div class="p-4 rounded border">
+                <div class="text-sm muted">Total Expense</div>
+                <div id="sum-expense" class="text-2xl font-bold text-red-600 mt-2">—</div>
               </div>
-              <div class="mt-4">
-                <div class="text-sm muted">Goal: ₹50,000</div>
-                <div class="w-full bg-gray-200 rounded h-4 mt-3 overflow-hidden"><div id="savings-progress" class="h-4 bg-green-500" style="width:40%"></div></div>
-                <div class="text-sm muted mt-3">Projected monthly save: <strong id="proj-save">₹3,000</strong></div>
+              <div class="p-4 rounded border">
+                <div class="text-sm muted">Total Income</div>
+                <div id="sum-income" class="text-2xl font-bold text-green-600 mt-2">—</div>
+              </div>
+              <div class="p-4 rounded border">
+                <div class="text-sm muted">Net Savings</div>
+                <div id="sum-net" class="text-2xl font-bold text-blue-600 mt-2">—</div>
               </div>
             </div>
           </div>
-            <!-- Monthly Summary -->
-            <div class="card p-5 h-full flex flex-col">
-              <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold">💸 Monthly Summary</h2>
-                <div class="text-sm muted">Transactions summary</div>
-              </div>
-              <div class="mt-4 grid grid-cols-3 gap-4">
-                <div class="p-4 rounded border">
-                  <div class="text-sm muted">Total Expense</div>
-                  <div id="sum-expense" class="text-2xl font-bold text-red-600 mt-2">—</div>
-                </div>
-                <div class="p-4 rounded border">
-                  <div class="text-sm muted">Total Income</div>
-                  <div id="sum-income" class="text-2xl font-bold text-green-600 mt-2">—</div>
-                </div>
-                <div class="p-4 rounded border">
-                  <div class="text-sm muted">Net Savings</div>
-                  <div id="sum-net" class="text-2xl font-bold text-blue-600 mt-2">—</div>
-                </div>
-              </div>
-            </div>
 
-          <!-- Category Breakdown (with small companion panel) -->
-          <div class="grid grid-cols-2 gap-6 items-stretch">
-            <div class="card p-5 h-full flex flex-col">
-              <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold">🔍 Category Breakdown</h2>
-                <div class="text-sm muted">Top 4 categories</div>
-              </div>
-              <div class="mt-4 grid grid-cols-2 gap-4">
-                <div id="category-list" class="space-y-3"></div>
-                <div>
-                  <svg id="cat-spark" class="w-full h-32"></svg>
-                </div>
-              </div>
-            </div>
-            <div class="card p-5 h-full flex flex-col">
-              <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold">📊 Quick Metrics</h2>
-                <div class="text-sm muted">Overview</div>
-              </div>
-              <div class="mt-4 space-y-3">
-                <div class="text-sm muted">Budget Utilization</div>
-                <div class="mt-2">
-                  <div class="text-xs muted">Essentials</div>
-                  <div class="w-full bg-gray-200 rounded h-3 mt-1"><div id="util-essentials" class="h-3 bg-indigo-500" style="width:40%"></div></div>
-                </div>
-                <div class="mt-2">
-                  <div class="text-xs muted">Discretionary</div>
-                  <div class="w-full bg-gray-200 rounded h-3 mt-1"><div id="util-discr" class="h-3 bg-pink-500" style="width:30%"></div></div>
-                </div>
-                <div class="mt-3 flex justify-between"><div class="muted">Upcoming bills</div><div id="qm-bills" class="font-semibold">—</div></div>
-                <div class="flex justify-between"><div class="muted">Recent txns</div><div id="qm-txns" class="font-semibold">—</div></div>
-              </div>
-            </div>
-          </div>
+          <!-- Category Breakdown and Quick Metrics removed -->
     
 
           <!-- Recent Transactions -->
@@ -268,6 +210,14 @@
             <div class="text-sm muted">Spending Trend</div>
             <svg class="sparkline mt-3" viewBox="0 0 100 36" preserveAspectRatio="none"><polyline id="trendline" fill="none" stroke="#0ea5a4" stroke-width="2" points=""></polyline></svg>
           </div>
+
+          <div class="card p-4">
+            <div class="flex items-center justify-between">
+              <div class="text-sm muted">Debug</div>
+              <button id="toggle-debug" class="text-xs px-2 py-1 bg-gray-100 rounded">Show API</button>
+            </div>
+            <pre id="debug-panel" class="mt-3 text-xs overflow-auto" style="max-height:200px;display:none;background:#111827;color:#d1d5db;padding:8px;border-radius:6px;"></pre>
+          </div>
         
         </div>
       </aside>
@@ -276,35 +226,8 @@
   </main>
 
   <script>
-    // Mock data (UI-only). Replace with real data when backend available.
-    const mock = {
-      userName: 'Sanjay',
-      date: new Date().toLocaleDateString(),
-      insight: {
-        topCategory: 'Food',
-        topAmount: 4200,
-        wow: '+6%',
-        biggest: {amount:1200, label:'Travel'},
-        pattern: 'Your weekend spending is higher than weekdays.',
-        reco: 'Try reducing food orders to save ₹500+ next month.'
-      },
-      forecast: {
-        total: 18500,
-        change: '+4%',
-        cats: ['Food +8%','Transport -5%'],
-        savings: 3000,
-        trend: 'Slight increase expected due to seasonal spending.'
-      },
-      reminders: {
-        ai_text: 'You have 2 bills due this week.',
-        due_today: [{name:'Electricity', due:'2025-11-28', amount:3500}],
-        upcoming: [{name:'Internet', due:'2025-12-03', amount:999}],
-        overdue: [{name:'Water', due:'2025-11-20', amount:400}]
-      },
-      monthly: {expense: 12850, income: 42000},
-      categories: [ ['Food',4200], ['Transport',1800], ['Entertainment',900], ['Rent',7000] ],
-      txns: [ ['Expense','Food',220,'Today'], ['Income','Salary',25000,'2025-11-01'], ['Expense','Transport',300,'2025-11-26'], ['Expense','Entertainment',450,'2025-11-22'], ['Expense','Utilities',999,'2025-11-15'] ]
-    };
+    // No local mock data: dashboard now prefers live DB-driven endpoints.
+    // The client will show empty/placeholder values if endpoints are not available.
 
     // hydrate UI: try to fetch DB-driven endpoints; fall back to mock data when unavailable
     async function fetchJson(url){
@@ -331,55 +254,185 @@
       const source = summary ? 'live' : 'mock';
 
       // Insights & Forecast remain mocked (AI agents). Fill those from mock always.
-      try{ document.getElementById('dashboard-date').textContent = mock.date }catch(e){}
-      document.getElementById('insight-top-category').textContent = `${mock.insight.topCategory} (₹${mock.insight.topAmount})`;
-      document.getElementById('insight-wow').textContent = mock.insight.wow;
-      document.getElementById('insight-biggest').textContent = `₹${mock.insight.biggest.amount} • ${mock.insight.biggest.label}`;
-      document.getElementById('insight-pattern').textContent = mock.insight.pattern;
-      document.getElementById('insight-reco').textContent = mock.insight.reco;
-      document.getElementById('forecast-total').textContent = `₹${mock.forecast.total} (${mock.forecast.change})`;
-      document.getElementById('forecast-cats').textContent = mock.forecast.cats.join(', ');
-      document.getElementById('forecast-savings').textContent = `₹${mock.forecast.savings}`;
-      document.getElementById('forecast-trend').textContent = mock.forecast.trend;
+        // Insights & Forecast: prefer live agent results, fall back to mock
+        // dashboard time UI: show nice formatted time + "Updated X ago"
+        let _lastFetchTime = null;
+        function _formatDateTime(d){
+          try{
+            return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' • ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          }catch(e){
+            return d.toString();
+          }
+        }
+        function _timeAgo(d){
+          if(!d) return '';
+          const s = Math.floor((Date.now() - d.getTime())/1000);
+          if(s < 5) return 'just now';
+          if(s < 60) return s + 's ago';
+          const m = Math.floor(s/60);
+          if(m < 60) return m + 'm ago';
+          const h = Math.floor(m/60);
+          if(h < 24) return h + 'h ago';
+          const days = Math.floor(h/24);
+          if(days === 1) return 'yesterday';
+          return days + 'd ago';
+        }
 
-      // Reminders: prefer notifications endpoint, otherwise mock
-      let reminders = mock.reminders;
+        function updateDashboardDateDisplay(){
+          const el = document.getElementById('dashboard-date');
+          if(!el) return;
+          const now = new Date();
+          const ref = _lastFetchTime || now;
+          const main = _formatDateTime(ref);
+          const rel = _timeAgo(ref);
+          el.innerHTML = `<div class="font-medium">${main}</div><div class="text-xs muted">Updated ${rel}</div>`;
+        }
+
+        // refresh button handler
+        const _refreshBtn = document.getElementById('dashboard-refresh');
+        if(_refreshBtn){
+          _refreshBtn.addEventListener('click', async function(){
+            _refreshBtn.disabled = true;
+            _refreshBtn.textContent = 'Refreshing…';
+            try{ await loadDashboard(); }catch(e){}
+            _refreshBtn.disabled = false;
+            _refreshBtn.textContent = 'Refresh';
+          });
+        }
+
+        // update the displayed relative time every 10 seconds
+        setInterval(updateDashboardDateDisplay, 10000);
+        let insightsRes = await fetchJson('/api/agents/insights');
+        // If no cached insights exist yet, trigger a cached refresh (no AI) and re-fetch so dashboard shows DB-driven insights.
+        if(!insightsRes){
+          try{
+            await fetch('/api/agents/insights/run', { method: 'POST', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+            insightsRes = await fetchJson('/api/agents/insights');
+          }catch(e){ /* ignore */ }
+        }
+        let forecastRes = await fetchJson('/api/agents/forecast');
+        if(!forecastRes){
+          try{
+            await fetch('/api/agents/forecast/run', { method: 'POST', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+            forecastRes = await fetchJson('/api/agents/forecast');
+          }catch(e){ /* ignore */ }
+        }
+
+        // Insights
+        const insElTop = document.getElementById('insight-top-category');
+        const insElWow = document.getElementById('insight-wow');
+        const insElBig = document.getElementById('insight-biggest');
+        const insElPattern = document.getElementById('insight-pattern');
+        const insElReco = document.getElementById('insight-reco');
+
+        if(insightsRes && insightsRes.result){
+          const ins = insightsRes.result;
+          // Biggest expense (deterministic or AI-provided)
+          const big = ins.biggest_expense || ins.biggest || null;
+          if(insElTop){
+            if(big){
+              const bam = (big.amount_cents || big.amountCents || big.amount || 0)/100;
+              const bl = big.label || big.name || '';
+              insElTop.textContent = `₹${bam.toFixed(2)} • ${bl}`;
+            } else if(ins.raw) {
+              insElTop.textContent = ins.raw.slice(0,80) + '...';
+            } else {
+              insElTop.textContent = '—';
+            }
+          }
+          if(insElWow){
+            const wow = ins.week_over_week_change || ins.week_over_week || ins.wow || null;
+            if(wow) insElWow.textContent = wow;
+          }
+          // Lowest expense (new)
+          if(insElBig){
+            const low = ins.lowest_expense || ins.lowest || null;
+            if(low){
+              const lam = (low.amount_cents || low.amountCents || low.amount || 0)/100;
+              const ll = low.label || low.name || '';
+              insElBig.textContent = `₹${lam.toFixed(2)} • ${ll}`;
+            } else {
+              insElBig.textContent = '—';
+            }
+          }
+          if(insElPattern){ if(ins.behavior_pattern) insElPattern.textContent = ins.behavior_pattern; else if(ins.pattern) insElPattern.textContent = ins.pattern; }
+          if(insElReco){ if(ins.recommendation) insElReco.textContent = ins.recommendation; else if(ins.reco) insElReco.textContent = ins.reco; }
+        } else {
+          // No live insights available — show neutral placeholders
+          if(insElTop) insElTop.textContent = 'No data';
+          if(insElWow) insElWow.textContent = '—';
+          if(insElBig) insElBig.textContent = '—';
+          if(insElPattern) insElPattern.textContent = '—';
+          if(insElReco) insElReco.textContent = '—';
+        }
+
+        // Forecast
+        const fTotalEl = document.getElementById('forecast-total');
+        const fCatsEl = document.getElementById('forecast-cats');
+        const fSavingsEl = document.getElementById('forecast-savings');
+        const fTrendEl = document.getElementById('forecast-trend');
+
+        if(forecastRes && forecastRes.result){
+          const f = forecastRes.result;
+          const expC = f.predicted_total_expense_cents || f.predictedTotalExpenseCents || f.predicted_expense_cents || 0;
+          const incC = f.predicted_total_income_cents || f.predictedTotalIncomeCents || f.predicted_income_cents || 0;
+          if(fTotalEl) fTotalEl.textContent = `Expense: ₹${(expC/100).toFixed(2)}`;
+          if(fCatsEl) fCatsEl.textContent = '';
+          if(fSavingsEl) fSavingsEl.textContent = `Income: ₹${(incC/100).toFixed(2)}`;
+          if(fTrendEl && (f.narrative || f.story)) fTrendEl.textContent = f.narrative || f.story;
+        } else {
+          if(fTotalEl) fTotalEl.textContent = '—';
+          if(fCatsEl) fCatsEl.textContent = '—';
+          if(fSavingsEl) fSavingsEl.textContent = '—';
+          if(fTrendEl) fTrendEl.textContent = '—';
+        }
+
+      // Reminders: prefer notifications endpoint; default to empty lists
+      let reminders = { ai_text: null, due_today: [], upcoming: [], overdue: [] };
       if(notifications && Array.isArray(notifications.notifications)){
-        // transform provider notifications to our simple structure
+        // transform provider notifications to our simple structure (amount in rupees as number)
         const ns = notifications.notifications;
-        const due_today = ns.filter(n=> n.type && n.type.includes('today')).map(n=>({name:n.title, due:(n.meta && n.meta.due_date)||n.created_at, amount:(n.meta && n.meta.amount_cents ? Math.round((n.meta.amount_cents||0)/100) : 0)}));
-        const upcoming = ns.filter(n=> n.type && n.type.includes('week')).map(n=>({name:n.title, due:(n.meta && n.meta.due_date)||n.created_at, amount:(n.meta && n.meta.amount_cents ? Math.round((n.meta.amount_cents||0)/100) : 0)}));
-        reminders = { ai_text: null, due_today, upcoming, overdue: ns.filter(n=> n.type && n.type.includes('overdue')).map(n=>({name:n.title, due:(n.meta && n.meta.due_date)||n.created_at, amount:(n.meta && n.meta.amount_cents ? Math.round((n.meta.amount_cents||0)/100) : 0)})) };
+        const due_today = ns.filter(n=> n.type && n.type.includes('today')).map(n=>({name:n.title, due:(n.meta && n.meta.due_date)||n.created_at, amount:(n.meta && n.meta.amount_cents ? (n.meta.amount_cents||0)/100.0 : 0)}));
+        const upcoming = ns.filter(n=> n.type && n.type.includes('week')).map(n=>({name:n.title, due:(n.meta && n.meta.due_date)||n.created_at, amount:(n.meta && n.meta.amount_cents ? (n.meta.amount_cents||0)/100.0 : 0)}));
+        reminders = { ai_text: null, due_today, upcoming, overdue: ns.filter(n=> n.type && n.type.includes('overdue')).map(n=>({name:n.title, due:(n.meta && n.meta.due_date)||n.created_at, amount:(n.meta && n.meta.amount_cents ? (n.meta.amount_cents||0)/100.0 : 0)})) };
       }
       document.getElementById('reminder-ai-block').innerHTML = reminders.ai_text ? `<div class="text-sm bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded">${reminders.ai_text}</div>` : '';
-      function mkBillCard(b){ return `<div class="p-3 rounded border flex items-center justify-between"><div><div class="font-semibold">${b.name}</div><div class="text-xs muted">Due ${b.due}</div></div><div class="text-sm font-semibold">₹${b.amount}</div></div>` }
+      function mkBillCard(b){ return `<div class="p-3 rounded border flex items-center justify-between"><div><div class="font-semibold">${b.name}</div><div class="text-xs muted">Due ${b.due}</div></div><div class="text-sm font-semibold">₹${(b.amount||0).toFixed(2)}</div></div>` }
       document.getElementById('reminders-due-today').innerHTML = (reminders.due_today||[]).map(mkBillCard).join('');
       document.getElementById('reminders-upcoming').innerHTML = (reminders.upcoming||[]).map(mkBillCard).join('');
       document.getElementById('reminders-overdue').innerHTML = (reminders.overdue||[]).map(mkBillCard).join('');
 
-      // Monthly summary: prefer summary.monthly
-      const monthly = (data.monthly) ? data.monthly : mock.monthly;
-      document.getElementById('sum-expense').textContent = `₹${monthly.expense}`;
-      document.getElementById('sum-income').textContent = `₹${monthly.income}`;
-      document.getElementById('sum-net').textContent = `₹${monthly.income - monthly.expense}`;
+      // record last successful refresh time and update header display
+      try{ _lastFetchTime = new Date(); }catch(e){}
+      try{ updateDashboardDateDisplay(); }catch(e){}
 
-      // Category breakdown: prefer data.categories else mock
-      const categories = data.categories && data.categories.length ? data.categories : mock.categories;
+      // Monthly summary: prefer summary.monthly
+      const monthly = (data && data.monthly) ? data.monthly : null;
+      const sumExpenseEl = document.getElementById('sum-expense'); if(sumExpenseEl) sumExpenseEl.textContent = monthly ? `₹${monthly.expense.toFixed(2)}` : '—';
+      const sumIncomeEl = document.getElementById('sum-income'); if(sumIncomeEl) sumIncomeEl.textContent = monthly ? `₹${monthly.income.toFixed(2)}` : '—';
+      const sumNetEl = document.getElementById('sum-net'); if(sumNetEl) sumNetEl.textContent = monthly ? `₹${(monthly.income - monthly.expense).toFixed(2)}` : '—';
+
+      // Category breakdown: prefer data.categories else empty
+      const categories = (data && data.categories && data.categories.length) ? data.categories : [];
       const maxCat = Math.max(...categories.map(c=>c[1]));
       const catList = document.getElementById('category-list');
-      catList.innerHTML = '';
-      categories.forEach(c=>{
-        const pct = Math.round((c[1]/maxCat)*100);
-        const div = document.createElement('div');
-        div.innerHTML = `<div class="flex items-center justify-between"><div>${c[0]}</div><div class="font-semibold">₹${c[1]}</div></div><div class="w-full h-2 bg-gray-200 rounded mt-1"><div style='width:${pct}% ' class='h-2 bg-indigo-500 rounded'></div></div>`;
-        catList.appendChild(div);
-      });
+      if(catList){
+        catList.innerHTML = '';
+        categories.forEach(c=>{
+          const pct = Math.round((c[1]/maxCat)*100);
+          const div = document.createElement('div');
+          div.innerHTML = `<div class="flex items-center justify-between"><div>${c[0]}</div><div class="font-semibold">₹${c[1]}</div></div><div class="w-full h-2 bg-gray-200 rounded mt-1"><div style='width:${pct}% ' class='h-2 bg-indigo-500 rounded'></div></div>`;
+          catList.appendChild(div);
+        });
+      }
       const catSpark = document.getElementById('cat-spark');
-      const pts = categories.map((c,i)=> `${10 + i*20},${30 - (c[1]/maxCat)*24}`).join(' ');
-      catSpark.innerHTML = `<polyline points="${pts}" fill="none" stroke="#6366f1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+      if(catSpark){
+        const pts = categories.map((c,i)=> `${10 + i*20},${30 - (c[1]/maxCat)*24}`).join(' ');
+        catSpark.innerHTML = `<polyline points="${pts}" fill="none" stroke="#6366f1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+      }
 
-      // Recent txns: prefer recentTxns or mock.txns
-      const txsData = (recentTxns && recentTxns.transactions) ? recentTxns.transactions : mock.txns;
+      // Recent txns: prefer recentTxns or empty
+      const txsData = (recentTxns && recentTxns.transactions) ? recentTxns.transactions : [];
       const txs = document.getElementById('recent-txns');
       txs.innerHTML = '';
       txsData.forEach(t=>{
@@ -388,26 +441,26 @@
         if(Array.isArray(t)){
           tr.innerHTML = `<td class='py-2 ${t[0]==='Income'?'text-green-600':'text-red-600'}'>${t[0]}</td><td class='py-2'>${t[1]}</td><td class='py-2 font-semibold'>₹${t[2]}</td><td class='py-2 muted'>${t[3]}</td>`;
         } else {
-          tr.innerHTML = `<td class='py-2 ${t.txn_type==='income'?'text-green-600':'text-red-600'}'>${t.txn_type}</td><td class='py-2'>${t.category || t.category_name || ''}</td><td class='py-2 font-semibold'>₹${Math.round((t.amount_cents||0)/100)}</td><td class='py-2 muted'>${t.occurred_at || t.date || ''}</td>`;
+          tr.innerHTML = `<td class='py-2 ${t.txn_type==='income'?'text-green-600':'text-red-600'}'>${t.txn_type}</td><td class='py-2'>${t.category || t.category_name || ''}</td><td class='py-2 font-semibold'>₹${((t.amount_cents||0)/100).toFixed(2)}</td><td class='py-2 muted'>${t.occurred_at || t.date || ''}</td>`;
         }
         txs.appendChild(tr);
       });
 
       // Stagnant right column values
-      document.getElementById('st-income').textContent = `₹${monthly.income}`;
-      document.getElementById('st-expense').textContent = `₹${monthly.expense}`;
-      document.getElementById('st-bills').textContent = `${(reminders.due_today||[]).length + (reminders.upcoming||[]).length} upcoming`;
-      document.getElementById('st-txns').textContent = `${txsData.length} recent`;
+      const stIncomeEl = document.getElementById('st-income'); if(stIncomeEl) stIncomeEl.textContent = monthly ? `₹${monthly.income.toFixed(2)}` : '—';
+      const stExpenseEl = document.getElementById('st-expense'); if(stExpenseEl) stExpenseEl.textContent = monthly ? `₹${monthly.expense.toFixed(2)}` : '—';
+      const stBillsEl = document.getElementById('st-bills'); if(stBillsEl) stBillsEl.textContent = `${(reminders.due_today||[]).length + (reminders.upcoming||[]).length} upcoming`;
+      const stTxnsEl = document.getElementById('st-txns'); if(stTxnsEl) stTxnsEl.textContent = `${txsData.length} recent`;
 
-      // Quick metrics fields
-      document.getElementById('qm-bills').textContent = `${(reminders.upcoming||[]).length}`;
-      document.getElementById('qm-txns').textContent = `${txsData.length}`;
+      // Quick metrics fields (removed from layout — update only if present)
+      const qmBillsEl = document.getElementById('qm-bills'); if(qmBillsEl) qmBillsEl.textContent = `${(reminders.upcoming||[]).length}`;
+      const qmTxnsEl = document.getElementById('qm-txns'); if(qmTxnsEl) qmTxnsEl.textContent = `${txsData.length}`;
 
-      // budget utilization (mock calculation if server not provided)
+      // budget utilization (mock calculation if server not provided) — guard elements
       const essentialsPct = data.utilization ? data.utilization.essentials_pct : 40;
       const discrPct = data.utilization ? data.utilization.discretionary_pct : 30;
-      document.getElementById('util-essentials').style.width = essentialsPct + '%';
-      document.getElementById('util-discr').style.width = discrPct + '%';
+      const utilEss = document.getElementById('util-essentials'); if(utilEss) utilEss.style.width = essentialsPct + '%';
+      const utilDis = document.getElementById('util-discr'); if(utilDis) utilDis.style.width = discrPct + '%';
 
       // trendline (mocked if no data)
       const trend = (data.trend && data.trend.points) ? data.trend.points : [10,12,14,13,15,18,16,19,20,18];
@@ -419,17 +472,137 @@
     loadDashboard();
 
     // Run reminder button wired to backend when available
-    document.getElementById('run-reminder').addEventListener('click', async function(){
-      try{
-        const r = await fetch('/agents/reminders/run', {method:'POST', credentials:'same-origin'});
-        const j = await r.json();
-        // reload reminders after run
-        await loadDashboard();
-        alert('Reminder agent run: ' + (j.status||'done'));
-      }catch(e){
-        alert('Failed to run reminder agent: ' + e);
-      }
-    });
+    const runRemBtn = document.getElementById('run-reminder');
+    if(runRemBtn){
+      runRemBtn.addEventListener('click', async function(){
+        try{
+          const r = await fetch('/api/agents/reminders/run', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})});
+          const j = await r.json().catch(()=>({}));
+          // reload reminders after run
+          await loadDashboard();
+          alert('Reminder agent run: ' + (j.status||'done'));
+        }catch(e){
+          alert('Failed to run reminder agent: ' + e);
+        }
+      });
+    }
+
+    // Run Insights button handler
+    const runInsightsBtn = document.getElementById('run-insights');
+    if(runInsightsBtn){
+      runInsightsBtn.addEventListener('click', async function(){
+        if(!confirm('Run Insights now? This may call the AI and use quota. Click OK to force AI, Cancel to refresh cached insights.')){
+          // user cancelled force; do a cached refresh
+          runInsightsBtn.disabled = true;
+          runInsightsBtn.textContent = 'Refreshing…';
+          try{
+            const r = await fetch('/api/agents/insights/run', {method:'POST', credentials:'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})});
+            await loadDashboard();
+            alert('Insights refreshed (cached)');
+          }catch(e){
+            alert('Failed to refresh insights: ' + e);
+          } finally {
+            runInsightsBtn.disabled = false;
+            runInsightsBtn.textContent = 'Run Insights';
+          }
+          return;
+        }
+
+        // confirmed -> force AI
+        runInsightsBtn.disabled = true;
+        runInsightsBtn.textContent = 'Running…';
+        try{
+          const r = await fetch('/api/agents/insights/run', {method:'POST', credentials:'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({force_ai: true})});
+          let j;
+          try{ j = await r.json(); } catch(e){ const txt = await r.text().catch(()=>null); j = { error: txt || 'invalid json' }; }
+          await loadDashboard();
+          if(j.result && !j.result.error) {
+            alert('Insights updated (AI)');
+          } else {
+            alert('Insights run returned error: ' + (j.result && j.result.error ? j.result.error : JSON.stringify(j)));
+          }
+        }catch(e){
+          alert('Failed to run insights agent: ' + e);
+        } finally {
+          runInsightsBtn.disabled = false;
+          runInsightsBtn.textContent = 'Run Insights';
+        }
+      });
+    }
+
+    // Run Forecast button handler
+    const runForecastBtn = document.getElementById('run-forecast');
+    if(runForecastBtn){
+      runForecastBtn.addEventListener('click', async function(){
+        runForecastBtn.disabled = true;
+        runForecastBtn.textContent = 'Running…';
+        try{
+          const r = await fetch('/api/agents/forecast/run', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})});
+          let j;
+          try{ j = await r.json(); } catch(e){ const txt = await r.text().catch(()=>null); j = { error: txt || 'invalid json' }; }
+          await loadDashboard();
+          if(j.result && !j.result.error) {
+            alert('Forecast updated');
+          } else {
+            alert('Forecast run returned error: ' + (j.result && j.result.error ? j.result.error : JSON.stringify(j)));
+          }
+        }catch(e){
+          alert('Failed to run forecast agent: ' + e);
+        } finally {
+          runForecastBtn.disabled = false;
+          runForecastBtn.textContent = 'Run Forecast';
+        }
+      });
+    }
+
+    // Debug panel: toggle and fetch raw API JSON to help diagnose missing values
+    const toggleDebugBtn = document.getElementById('toggle-debug');
+    const debugPanel = document.getElementById('debug-panel');
+    if(toggleDebugBtn && debugPanel){
+      toggleDebugBtn.addEventListener('click', async function(){
+        if(debugPanel.style.display === 'none'){
+          debugPanel.textContent = 'Loading API responses...';
+          try{
+            // first, check authentication/debug info
+            let whoami = null;
+            try{
+              whoami = await fetchJson('/_debug/whoami');
+            }catch(e){ whoami = { error: String(e) }; }
+
+            const endpoints = ['/api/dashboard/summary','/api/transactions/recent','/api/notifications/json'];
+            const results = {};
+            for(const ep of endpoints){
+              try{
+                const r = await fetch(ep, { credentials: 'same-origin' });
+                if(!r.ok){
+                  results[ep] = { ok:false, status: r.status, statusText: r.statusText };
+                  try{ results[ep].body = await r.text(); }catch(e){}
+                } else {
+                  try{
+                    const body = await r.json();
+                    results[ep] = { ok:true, status: r.status, body };
+                  }catch(e){
+                    results[ep] = { ok:true, status: r.status, body_text: await r.text() };
+                  }
+                }
+              }catch(err){
+                results[ep] = { ok:false, error: String(err) };
+              }
+            }
+
+            const out = { whoami, results };
+            debugPanel.textContent = JSON.stringify(out, null, 2);
+          }catch(e){
+            debugPanel.textContent = 'Debug fetch failed: ' + String(e);
+          }
+          debugPanel.style.display = 'block';
+          toggleDebugBtn.textContent = 'Hide API';
+        } else {
+          debugPanel.style.display = 'none';
+          toggleDebugBtn.textContent = 'Show API';
+        }
+      });
+    }
 
   </script>
 </body>

@@ -12,6 +12,9 @@ from sqlalchemy import inspect, text, create_engine
 from sqlalchemy.exc import OperationalError
 from threading import Thread
 from agents.chat_agent import run_chat_agent
+from agents.insights_agent import run_insights_agent_for_user
+from agents.forecast_agent import run_forecast_agent_for_user
+from agents.reminder_agent import get_upcoming_reminders, mark_bill_paid, run_reminder_agent_for_user
 
 def _compute_next_due_from(start_date, period, interval_count=1):
     if not start_date:
@@ -81,13 +84,10 @@ def get_current_user():
         try:
             return User.query.get(user_id)
         except Exception:
-            # give up and return None so routes can redirect to login gracefully
             return None
     except Exception:
         return None
 
-
-# Agent cache/invalidation removed — agents are disabled in this build
 
 @app.route('/')
 def index():
@@ -173,7 +173,6 @@ def api_chat():
     if not message:
         return jsonify({'error': 'no message provided'}), 400
 
-    # Save user message to chat log (read-only agent still logs conversational history)
     try:
         ul = ChatLog(user_id=user.id, role='user', content=message)
         db.session.add(ul)
@@ -270,6 +269,91 @@ def transactions_page():
     return render_template('transaction.html', bills=bills_list, transactions=transactions_view, categories=category_names)
 
 
+@app.route('/notifications')
+def notifications_page():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    # get upcoming reminders for next 7 days
+    notes = get_upcoming_reminders(user.id, days=7)
+    # transform to template-friendly structure
+    notifs = []
+    for n in notes:
+        meta = n.get('meta', {})
+        amt = None
+        if meta.get('amount_cents') is not None:
+            try:
+                amt = round((meta.get('amount_cents') or 0)/100.0, 2)
+            except Exception:
+                amt = None
+        body = n.get('body') or ''
+        # format due_date (ISO -> friendly)
+        due_iso = meta.get('due_date')
+        try:
+            if due_iso:
+                from datetime import datetime
+                dd = datetime.fromisoformat(due_iso)
+                due_str = dd.strftime('%a, %b %d • %I:%M %p')
+                body = (body + '\nDue: ' + due_str) if body else ('Due: ' + due_str)
+        except Exception:
+            body = (body + '\nDue: ' + (due_iso or '')) if body else ('Due: ' + (due_iso or ''))
+        if amt is not None:
+            body = (body + f' • ₹{amt:.2f}')
+
+        # format created_at for display
+        created = n.get('created_at')
+        created_str = None
+        try:
+            if created:
+                from datetime import datetime
+                cd = datetime.fromisoformat(created)
+                created_str = cd.strftime('%a, %b %d • %I:%M %p')
+        except Exception:
+            created_str = created
+
+        notifs.append({'id': n.get('id'), 'title': n.get('title'), 'body': body, 'created_at': created_str, 'type': 'reminder'})
+    # fetch latest agent result (if any) to display AI summary
+    try:
+        ar = AgentResult.query.filter_by(user_id=user.id, agent_name='reminder_agent_v1').order_by(AgentResult.created_at.desc()).first()
+        agent_summary = None
+        if ar and ar.result_json:
+            try:
+                agent_summary = ar.result_json.get('message') if isinstance(ar.result_json, dict) else None
+            except Exception:
+                agent_summary = None
+    except Exception:
+        agent_summary = None
+
+    return render_template('notifications.html', notifications=notifs, agent_summary=agent_summary)
+
+
+@app.route('/notifications/<int:bill_id>/mark_done', methods=['POST'])
+def notifications_mark_done(bill_id):
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    res = mark_bill_paid(user.id, bill_id)
+    if res.get('ok'):
+        flash('Marked bill as paid. Next due: ' + (res.get('next_due') or 'none'), 'success')
+    else:
+        flash('Failed to mark bill: ' + (res.get('error') or 'unknown'), 'error')
+    return redirect(url_for('notifications_page'))
+
+
+@app.route('/notifications/<int:note_id>/mark_read', methods=['POST'])
+def notifications_mark_read(note_id):
+    # lightweight placeholder: no persistent notification model
+    flash('Marked as read.', 'success')
+    return redirect(url_for('notifications_page'))
+
+
+@app.route('/notifications/<int:note_id>/dismiss', methods=['POST'])
+def notifications_dismiss(note_id):
+    # placeholder: dismiss is not persisted (no notifications model)
+    flash('Dismissed.', 'info')
+    return redirect(url_for('notifications_page'))
+
+
 @app.route('/api/transactions/recent')
 def api_transactions_recent():
     """Return last 5 transactions for current user as JSON."""
@@ -303,6 +387,81 @@ def api_transactions_recent():
         return jsonify({'error': 'database error', 'details': str(e)}), 500
 
 
+@app.route('/api/agents/insights/run', methods=['POST'])
+def api_agents_insights_run():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    data = request.get_json(silent=True) or {}
+    force = bool(data.get('force_ai') or data.get('force'))
+    try:
+        res = run_insights_agent_for_user(user.id, force_ai=force)
+        return jsonify({'result': res})
+    except Exception as e:
+        try:
+            # attempt to rollback DB session if needed
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'error': f'Insigts agent run failed: {e}'}), 500
+
+
+@app.route('/api/agents/reminders/run', methods=['POST'])
+def api_agents_reminders_run():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    data = request.get_json(silent=True) or {}
+    force = bool(data.get('force_ai') or data.get('force'))
+    res = run_reminder_agent_for_user(user.id, force_ai=force)
+    return jsonify({'result': res})
+
+
+@app.route('/api/agents/reminders')
+def api_agents_reminders_get():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    ar = AgentResult.query.filter_by(user_id=user.id, agent_name='reminder_agent_v1').order_by(AgentResult.created_at.desc()).first()
+    return jsonify({'result': ar.result_json if ar else None})
+
+
+@app.route('/api/agents/insights')
+def api_agents_insights_get():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    ar = AgentResult.query.filter_by(user_id=user.id, agent_name='insight_agent_v1').order_by(AgentResult.created_at.desc()).first()
+    return jsonify({'result': ar.result_json if ar else None})
+
+
+@app.route('/api/agents/forecast/run', methods=['POST'])
+def api_agents_forecast_run():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    data = request.get_json(silent=True) or {}
+    force = bool(data.get('force_ai') or data.get('force'))
+    try:
+        res = run_forecast_agent_for_user(user.id, force_ai=force)
+        return jsonify({'result': res})
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'error': f'Forecast agent run failed: {e}'}), 500
+
+
+@app.route('/api/agents/forecast')
+def api_agents_forecast_get():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    ar = AgentResult.query.filter_by(user_id=user.id, agent_name='forecast_agent_v1').order_by(AgentResult.created_at.desc()).first()
+    return jsonify({'result': ar.result_json if ar else None})
+
+
 @app.route('/api/dashboard/summary')
 def api_dashboard_summary():
     """Return monthly totals and simple utilization for the current user.
@@ -321,10 +480,13 @@ def api_dashboard_summary():
         now = datetime.utcnow()
         start_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         # sum incomes and expenses for current month
-        incomes = db.session.query(db.func.coalesce(db.func.sum(Transaction.amount_cents), 0)).filter(Transaction.user_id == user.id, Transaction.txn_type == 'income', Transaction.occurred_at >= start_month).scalar() or 0
-        expenses = db.session.query(db.func.coalesce(db.func.sum(Transaction.amount_cents), 0)).filter(Transaction.user_id == user.id, Transaction.txn_type == 'expense', Transaction.occurred_at >= start_month).scalar() or 0
-        incomes = int(incomes)
-        expenses = int(expenses)
+        # sums are stored in cents in the DB; convert to rupees for the frontend
+        incomes_cents = db.session.query(db.func.coalesce(db.func.sum(Transaction.amount_cents), 0)).filter(Transaction.user_id == user.id, Transaction.txn_type == 'income', Transaction.occurred_at >= start_month).scalar() or 0
+        expenses_cents = db.session.query(db.func.coalesce(db.func.sum(Transaction.amount_cents), 0)).filter(Transaction.user_id == user.id, Transaction.txn_type == 'expense', Transaction.occurred_at >= start_month).scalar() or 0
+        incomes_cents = int(incomes_cents)
+        expenses_cents = int(expenses_cents)
+        incomes = round(incomes_cents / 100.0, 2)
+        expenses = round(expenses_cents / 100.0, 2)
 
         # upcoming bills in this month or next 7 days
         upcoming = []
@@ -336,7 +498,7 @@ def api_dashboard_summary():
             days_left = (nd.date() - now.date()).days
             # include if in current month
             if nd.year == now.year and nd.month == now.month:
-                upcoming.append({'id': b.id, 'name': b.name, 'next_due': nd.isoformat(), 'amount_cents': b.amount_cents})
+                upcoming.append({'id': b.id, 'name': b.name, 'next_due': nd.isoformat(), 'amount_cents': b.amount_cents, 'amount': round((b.amount_cents or 0)/100.0,2)})
             # also include if within next 7 days
             elif 0 <= days_left <= 7:
                 upcoming.append({'id': b.id, 'name': b.name, 'next_due': nd.isoformat(), 'amount_cents': b.amount_cents})
@@ -344,7 +506,8 @@ def api_dashboard_summary():
         # simple utilization mock: essentials = 60% of expenses, discretionary 40% (placeholder)
         util = {'essentials_pct': 60, 'discretionary_pct': 40}
 
-        return jsonify({'monthly': {'income': incomes//1, 'expense': expenses//1, 'net': (incomes - expenses)//1}, 'upcoming_bills': upcoming, 'utilization': util})
+        # return rupee values for easier display in the frontend
+        return jsonify({'monthly': {'income': incomes, 'expense': expenses, 'net': round((incomes - expenses),2)}, 'upcoming_bills': upcoming, 'utilization': util})
     except OperationalError as e:
         try:
             db.session.rollback()
@@ -682,7 +845,50 @@ def agents_center():
     user = get_current_user()
     if not user:
         return redirect(url_for('index'))
-    return render_template('agents.html')
+
+    # gather last-run timestamps for agents to display accurately
+    def fmt_timesince(dt):
+        if not dt:
+            return 'never'
+        try:
+            from datetime import datetime
+            diff = datetime.utcnow() - dt
+            seconds = int(diff.total_seconds())
+            if seconds < 60:
+                return 'just now'
+            if seconds < 3600:
+                mins = seconds // 60
+                return f"{mins} minute{'s' if mins!=1 else ''} ago"
+            if seconds < 86400:
+                hrs = seconds // 3600
+                return f"{hrs} hour{'s' if hrs!=1 else ''} ago"
+            days = seconds // 86400
+            return f"{days} day{'s' if days!=1 else ''} ago"
+        except Exception:
+            return str(dt)
+
+    # agent result names used elsewhere in the code
+    try:
+        last_insight = AgentResult.query.filter_by(user_id=user.id, agent_name='insight_agent_v1').order_by(AgentResult.created_at.desc()).first()
+        last_forecast = AgentResult.query.filter_by(user_id=user.id, agent_name='forecast_agent_v1').order_by(AgentResult.created_at.desc()).first()
+        last_reminder = AgentResult.query.filter_by(user_id=user.id, agent_name='reminder_agent_v1').order_by(AgentResult.created_at.desc()).first()
+    except Exception:
+        last_insight = last_forecast = last_reminder = None
+
+    # chat: use recent chat logs as "last run" indicator if no AgentResult exists
+    try:
+        last_chat_log = ChatLog.query.filter_by(user_id=user.id).order_by(ChatLog.created_at.desc()).first()
+    except Exception:
+        last_chat_log = None
+
+    last_runs = {
+        'insights': fmt_timesince(last_insight.created_at) if last_insight else 'never',
+        'forecast': fmt_timesince(last_forecast.created_at) if last_forecast else 'never',
+        'reminder': fmt_timesince(last_reminder.created_at) if last_reminder else 'never',
+        'chat': fmt_timesince(last_chat_log.created_at) if last_chat_log else 'never'
+    }
+
+    return render_template('agents.html', last_runs=last_runs)
 
 @app.route('/bills/create', methods=['POST'])
 def create_bill():

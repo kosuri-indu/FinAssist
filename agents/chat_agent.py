@@ -11,27 +11,22 @@ from sqlalchemy.sql import text
 
 load_dotenv()
 
-
 def prepare_chat_context(user_id: str) -> Dict[str, Any]:
     """Gather DB context for the chat agent and return a serializable dict.
     This follows the structure specified by the user instructions.
     """
-    # Last 20 transactions
     transactions = Transaction.query.filter_by(user_id=user_id).order_by(Transaction.occurred_at.desc()).limit(20).all()
 
-    # Category totals (join category names where available)
     sql = text("""
-        SELECT COALESCE(c.name, 'Uncategorized') as category, SUM(t.amount_cents) as total
+        SELECT c.name as category, SUM(t.amount_cents) as total
         FROM transactions t
-        LEFT JOIN categories c ON t.category_id = c.id
+        JOIN categories c ON t.category_id = c.id
         WHERE t.user_id = :uid
-        GROUP BY category
+        GROUP BY c.name
     """)
     category_rows = db.session.execute(sql, {"uid": user_id}).fetchall()
     category_totals = [{"category": r[0], "amount_cents": int(r[1] or 0)} for r in category_rows]
 
-    # Monthly totals (simple summary per month: income vs expense) - last 6 months
-    # Use DB-specific SQL: SQLite uses strftime, Postgres uses to_char(date_trunc(...),'YYYY-MM')
     dialect = getattr(db.engine, 'name', None) or db.session.bind.dialect.name
     if dialect and 'sqlite' in dialect:
         sql_monthly = text("""
@@ -45,7 +40,6 @@ def prepare_chat_context(user_id: str) -> Dict[str, Any]:
             LIMIT 6
         """)
     else:
-        # Assume Postgres-compatible SQL
         sql_monthly = text("""
             SELECT to_char(date_trunc('month', occurred_at), 'YYYY-MM') as ym,
                    SUM(CASE WHEN txn_type = 'income' THEN amount_cents ELSE 0 END) as income_cents,
@@ -61,10 +55,8 @@ def prepare_chat_context(user_id: str) -> Dict[str, Any]:
     for r in monthly_rows:
         monthly_totals.append({"month": r[0], "income_cents": int(r[1] or 0), "expense_cents": int(r[2] or 0)})
 
-    # Upcoming bills
     bills = Bill.query.filter_by(user_id=user_id).order_by(Bill.next_due.asc().nulls_last()).limit(5).all()
 
-    # Latest agent results (insight & forecast)
     insight = AgentResult.query.filter_by(user_id=user_id, agent_name="insight_agent_v1").order_by(AgentResult.created_at.desc()).first()
     forecast = AgentResult.query.filter_by(user_id=user_id, agent_name="forecast_agent_v1").order_by(AgentResult.created_at.desc()).first()
 
@@ -76,7 +68,6 @@ def prepare_chat_context(user_id: str) -> Dict[str, Any]:
         rupees = c / 100.0
         return f"₹{rupees:,.2f}"
 
-    # Map transactions and bills to include a user-friendly display amount
     tx_out = []
     for t in transactions:
         td = t.to_dict()
@@ -126,8 +117,16 @@ You must follow these rules strictly:
 4. Keep answers short, clear, and friendly.
 5. Do not perform actions or create new transactions. You are read-only.
 6. Base all answers strictly on the context given below.
-
 Use the context to answer user questions clearly.
+
+Additionally, when appropriate given the user's question and the provided context, produce concise, practical financial guidance in three areas:
+- Savings plan: suggest an achievable short-term plan (1-12 months) to build an emergency buffer, expressed as a weekly/monthly target and a simple priority order (e.g., reduce X, move Y to savings). Base any numeric targets strictly on amounts available in the context; if the context lacks sufficient data, state that and offer sensible percentage-based guidance (e.g., "aim for 5-10% of net income") without inventing exact rupee amounts.
+- Budget plan: provide a simple monthly budget split (percentages per category or high-level buckets: essentials, savings, discretionary) calibrated to the user's recent income/expense data in the context. If income is missing, present percentage ranges and explain assumptions.
+- Low-risk investment suggestions: list 2–3 low-risk options (e.g., fixed deposits, high-quality government bonds, short-term debt funds) with short notes on time horizon and liquidity. Do NOT claim returns that are not in the context; instead give qualitative guidance (e.g., "low expected returns, high capital preservation"). Mention inflation sensitivity briefly and recommend time horizon.
+
+Always be explicit about assumptions and show where you drew numbers from the provided context. If you must give ranges because exact values are missing, label them clearly (e.g., "estimate, based on last 3 months' average"). Never fabricate exact transaction-level data.
+
+Important: All monetary amounts in the context are in Indian Rupees (INR). Numeric amounts are provided in paise (stored as `amount_cents`). When presenting amounts to the user, convert to rupees (divide by 100) and use the `₹` symbol. Be explicit that amounts are in ₹.
         """
     )
 
@@ -138,11 +137,9 @@ Use the context to answer user questions clearly.
     ]
 
     if prior_chat:
-        # prior_chat expected as list of {'role': 'user'|'assistant', 'content': '...'} in chronological order
         for m in prior_chat:
             messages.append({"role": m.get('role', 'user'), "content": m.get('content', '')})
 
-    # finally add the current user message
     messages.append({"role": "user", "content": user_message})
     return messages
 
@@ -157,13 +154,11 @@ def run_chat_agent(user_id: str, message: str) -> str:
     if not api_key:
         return 'OPENAI_API_KEY not set. Please add it to your .env file.'
 
-    # prepare context from DB
     try:
         context = prepare_chat_context(user_id)
     except Exception as e:
         return f'Error gathering context: {e}'
 
-    # fetch recent chat history (last 8 messages) so short follow-ups have context
     try:
         prior = ChatLog.query.filter_by(user_id=user_id).order_by(ChatLog.created_at.desc()).limit(8).all()
         prior = list(reversed([{"role": p.role, "content": p.content} for p in prior]))
@@ -173,9 +168,28 @@ def run_chat_agent(user_id: str, message: str) -> str:
     messages = build_chat_prompt(message, context, prior_chat=prior)
 
     try:
+        # Add a small retry/backoff loop to handle transient 429 rate-limit errors
+        import time
         client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(model=model, messages=messages, max_tokens=500, temperature=0.0)
-        assistant = response.choices[0].message.content
-        return assistant.strip()
+        attempts = 3
+        backoff = 1.0
+        last_err = None
+        for attempt in range(1, attempts + 1):
+            try:
+                response = client.chat.completions.create(model=model, messages=messages, max_tokens=500, temperature=0.0)
+                assistant = response.choices[0].message.content
+                return assistant.strip()
+            except Exception as e:
+                last_err = e
+                msg = str(e).lower()
+                # if rate-limited or transient server error, wait and retry
+                if '429' in msg or 'rate limit' in msg or 'too many' in msg or 'server error' in msg:
+                    time.sleep(backoff)
+                    backoff *= 2
+                    continue
+                # otherwise don't retry
+                return f'OpenAI request failed: {e}'
+        # exhausted retries
+        return f'OpenAI request failed after retries: {last_err}'
     except Exception as e:
-        return f'OpenAI request failed: {e}'
+        return f'OpenAI setup failed: {e}'

@@ -41,8 +41,8 @@
               </div>
             </div>
             <div class="mt-3 flex items-center justify-between">
-              <div class="text-xs text-gray-500">Last Run: 2 hours ago</div>
-              <form method="post" action="/agents/insight/run"><button class="px-3 py-1 bg-green-600 text-white rounded text-sm">Run</button></form>
+              <div class="text-xs text-gray-500">Last Run: {{ last_runs.insights }}</div>
+              <button class="px-3 py-1 bg-green-600 text-white rounded text-sm run-agent" data-agent="insights">Run</button>
             </div>
           </div>
 
@@ -70,8 +70,8 @@
               </div>
             </div>
             <div class="mt-3 flex items-center justify-between">
-              <div class="text-xs text-gray-500">Last Run: 1 day ago</div>
-              <form method="post" action="/agents/forecast/run"><button class="px-3 py-1 bg-orange-600 text-white rounded text-sm">Run</button></form>
+              <div class="text-xs text-gray-500">Last Run: {{ last_runs.forecast }}</div>
+              <button class="px-3 py-1 bg-orange-600 text-white rounded text-sm run-agent" data-agent="forecast">Run</button>
             </div>
           </div>
 
@@ -99,8 +99,8 @@
               </div>
             </div>
             <div class="mt-3 flex items-center justify-between">
-              <div class="text-xs text-gray-500">Last Run: 6 hours ago</div>
-              <form method="post" action="/agents/reminder/run"><button class="px-3 py-1 bg-blue-600 text-white rounded text-sm">Run</button></form>
+              <div class="text-xs text-gray-500">Last Run: {{ last_runs.reminder }}</div>
+              <button class="px-3 py-1 bg-blue-600 text-white rounded text-sm run-agent" data-agent="reminder">Run</button>
             </div>
           </div>
 
@@ -128,11 +128,58 @@
               </div>
             </div>
             <div class="mt-3 flex items-center justify-between">
-              <div class="text-xs text-gray-500">Last Run: 30 minutes ago</div>
-              <form method="post" action="/agents/chat/run"><button class="px-3 py-1 bg-violet-600 text-white rounded text-sm">Run</button></form>
+              <div class="text-xs text-gray-500">Last Run: {{ last_runs.chat }}</div>
+              <button class="px-3 py-1 bg-violet-600 text-white rounded text-sm run-agent" data-agent="chat">Open Chat</button>
             </div>
           </div>
         </section>
+      <script>
+        // Map agent keys to API endpoints or actions
+        const agentEndpoint = {
+          'insights': '/api/agents/insights/run',
+          'forecast': '/api/agents/forecast/run',
+          'reminder': '/api/agents/reminders/run'
+        };
+
+        function toast(msg){
+          const el = document.createElement('div');
+          el.className = 'fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-2 rounded shadow';
+          el.textContent = msg;
+          document.body.appendChild(el);
+          setTimeout(()=> el.remove(), 3000);
+        }
+
+        document.querySelectorAll('.run-agent').forEach(btn=>{
+          btn.addEventListener('click', async (e)=>{
+            const agent = btn.getAttribute('data-agent');
+            if(agent === 'chat'){
+              // chat opens chat page
+              window.location.href = '/chat';
+              return;
+            }
+            const ep = agentEndpoint[agent];
+            if(!ep){ toast('No endpoint for agent'); return; }
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+            try{
+              const res = await fetch(ep, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({force_ai: false}) });
+              if(res.ok){
+                toast('Agent run completed. Refreshing...');
+                setTimeout(()=> location.reload(), 800);
+              } else {
+                const j = await res.json().catch(()=>null);
+                toast('Agent run failed: ' + (j && j.error ? j.error : res.status));
+                btn.disabled = false;
+                btn.textContent = 'Run';
+              }
+            }catch(err){
+              toast('Request failed: ' + err);
+              btn.disabled = false;
+              btn.textContent = 'Run';
+            }
+          });
+        });
+      </script>
       </div>
     </main>
 </body>

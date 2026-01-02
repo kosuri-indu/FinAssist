@@ -11,8 +11,61 @@
     {% include 'sidebar.html' %}
 
     <main class="main-content ml-72 p-8">
-        <h1 class="text-3xl font-extrabold text-gray-900 mb-4">Notifications</h1>
-        <p class="text-sm text-gray-600 mb-4">Recent alerts, reminders and messages about your account.</p>
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h1 class="text-3xl font-extrabold text-gray-900">Notifications</h1>
+            <p class="text-sm text-gray-600">Recent alerts, reminders and messages about your account.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <a href="/agents" class="text-sm px-3 py-1 bg-gray-100 rounded">Agents Center</a>
+            <button id="refresh-summary" class="text-sm px-3 py-1 bg-gray-200 text-gray-800 rounded">Refresh Summary</button>
+            <button id="force-ai-reminder" class="text-sm px-3 py-1 bg-blue-600 text-white rounded">Force AI Summary</button>
+          </div>
+        </div>
+        <div id="agent-summary-container">
+        {% if agent_summary %}
+          {# agent_summary may be a dict with message/details or a plain string; handle both #}
+          {% if agent_summary is mapping %}
+            <div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="text-sm font-semibold text-blue-800">Smart Reminder</div>
+                  <div id="agent-summary-message" class="text-sm text-blue-700 mt-2">{{ agent_summary.message }}</div>
+                </div>
+                <div class="text-xs text-gray-500">Cached</div>
+              </div>
+
+              <div id="agent-summary-details" class="mt-3 text-sm text-gray-700">
+                <div class="mb-2">Total: <strong>₹{{ agent_summary.details.total_rupees }}</strong> • {{ agent_summary.details.count }} bill{{ 's' if agent_summary.details.count != 1 else '' }}</div>
+                <div>
+                  <table class="w-full text-left text-sm">
+                    <thead>
+                      <tr class="text-xs text-gray-500">
+                        <th>Due</th><th>Bill</th><th>Amount</th><th>Days</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for b in agent_summary.details.bills %}
+                      <tr class="border-t">
+                        <td class="py-1">{{ b.due_date or '-' }}</td>
+                        <td class="py-1">{{ b.name }}</td>
+                        <td class="py-1">₹{{ '%.2f'|format(b.amount_rupees) }}</td>
+                        <td class="py-1">{{ b.days_until if b.days_until is not none else '-' }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
+              <div class="text-sm font-semibold text-blue-800">Smart Reminder</div>
+              <div class="text-sm text-blue-700 mt-2">{{ agent_summary }}</div>
+            </div>
+          {% endif %}
+        {% endif %}
+        </div>
 
         <div class="space-y-3">
           {% if notifications is defined and notifications|length > 0 %}
@@ -36,12 +89,17 @@
                   <div class="text-xs text-gray-500">{{ n.created_at }}</div>
                 </div>
                 <div class="mt-3 flex gap-2">
-                  <form method="post" action="/notifications/{{ n.id }}/mark_read">
-                    <button class="px-3 py-1 bg-gray-100 text-gray-800 rounded text-sm">Mark as read</button>
-                  </form>
-                  <form method="post" action="/notifications/{{ n.id }}/dismiss">
-                    <button class="px-3 py-1 bg-transparent border border-gray-200 text-gray-600 rounded text-sm">Dismiss</button>
-                  </form>
+                    {% if n.type == 'reminder' %}
+                    <form method="post" action="/notifications/{{ n.id }}/mark_done">
+                      <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded text-sm">✓ Paid</button>
+                    </form>
+                    {% endif %}
+                    <form method="post" action="/notifications/{{ n.id }}/mark_read">
+                      <button class="px-3 py-1 bg-gray-100 text-gray-800 rounded text-sm">Mark as read</button>
+                    </form>
+                    <form method="post" action="/notifications/{{ n.id }}/dismiss">
+                      <button class="px-3 py-1 bg-transparent border border-gray-200 text-gray-600 rounded text-sm">Dismiss</button>
+                    </form>
                 </div>
               </div>
             </div>
@@ -53,5 +111,80 @@
           {% endif %}
         </div>
     </main>
+    <script>
+      (function(){
+        const refreshBtn = document.getElementById('refresh-summary');
+        const forceBtn = document.getElementById('force-ai-reminder');
+        const container = document.getElementById('agent-summary-container');
+
+        function showToast(msg){
+          try{
+            // simple toast: append a transient div
+            const t = document.createElement('div');
+            t.textContent = msg;
+            t.className = 'fixed bottom-6 right-6 bg-gray-800 text-white px-4 py-2 rounded shadow';
+            document.body.appendChild(t);
+            setTimeout(()=>{ t.remove(); }, 3500);
+          }catch(e){ console.warn(e); }
+        }
+
+        async function fetchSummary(force){
+          const btn = force ? forceBtn : refreshBtn;
+          if(btn) btn.disabled = true;
+          const origText = btn ? btn.textContent : '';
+          if(btn) btn.textContent = force ? 'Forcing…' : 'Refreshing…';
+          try{
+            const body = force ? JSON.stringify({force_ai:true}) : JSON.stringify({});
+            const r = await fetch('/api/agents/reminders/run', { method: 'POST', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body});
+            const j = await r.json().catch(()=>({error:'invalid json'}));
+            if(!r.ok){
+              showToast('Summary request failed');
+              console.error('summary fetch failed', r.statusText, j);
+              return;
+            }
+            if(j.result && j.result.error){
+              showToast('Summary error: ' + j.result.error);
+              return;
+            }
+            const res = j.result;
+            // render inline
+            if(!container) return;
+            let html = '';
+            if(res){
+              if(typeof res === 'string'){
+                html = `<div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded"><div class="text-sm font-semibold text-blue-800">Smart Reminder</div><div class="text-sm text-blue-700 mt-2">${res}</div></div>`;
+              } else {
+                const total = (res.details && res.details.total_rupees) ? res.details.total_rupees : 0;
+                const count = (res.details && typeof res.details.count !== 'undefined') ? res.details.count : (res.bills?res.bills.length:0);
+                html = `<div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">`+
+                       `<div class="flex items-start justify-between"><div><div class="text-sm font-semibold text-blue-800">Smart Reminder</div><div id="agent-summary-message" class="text-sm text-blue-700 mt-2">${res.message || ''}</div></div><div class="text-xs text-gray-500">${force? 'AI' : 'Cached'}</div></div>`+
+                       `<div class="mt-3 text-sm text-gray-700"><div class="mb-2">Total: <strong>₹${total}</strong> • ${count} bill${count!==1?'s':''}</div>`;
+                if(res.details && res.details.bills && res.details.bills.length){
+                  html += `<div><table class="w-full text-left text-sm"><thead><tr class="text-xs text-gray-500"><th>Due</th><th>Bill</th><th>Amount</th><th>Days</th></tr></thead><tbody>`;
+                  for(const b of res.details.bills){
+                    html += `<tr class="border-t"><td class="py-1">${b.due_date || '-'}</td><td class="py-1">${b.name}</td><td class="py-1">₹${(b.amount_rupees||0).toFixed?b.amount_rupees.toFixed(2):(b.amount_rupees||0)}</td><td class="py-1">${(b.days_until!==null && typeof b.days_until !== 'undefined')?b.days_until:'-'}</td></tr>`;
+                  }
+                  html += `</tbody></table></div>`;
+                }
+                if(res.ai_message){
+                  html += `<div class="mt-3 p-2 bg-white border rounded text-sm text-gray-800"><strong>AI:</strong> ${res.ai_message}</div>`;
+                }
+                html += `</div></div>`;
+              }
+            }
+            container.innerHTML = html;
+            showToast('Summary updated');
+          }catch(e){
+            console.error(e);
+            showToast('Request failed');
+          } finally {
+            if(btn) { btn.disabled = false; btn.textContent = origText; }
+          }
+        }
+
+        if(refreshBtn) refreshBtn.addEventListener('click', function(){ fetchSummary(false); });
+        if(forceBtn) forceBtn.addEventListener('click', function(){ if(!confirm('Force an AI summary? This uses your OpenAI quota.')) return; fetchSummary(true); });
+      })();
+    </script>
   </body>
 </html>

@@ -16,13 +16,12 @@
       <header class="page-header mb-6"><h1 class="text-3xl font-extrabold text-gray-900">Add Data</h1></header>
 
       <div class="card mx-auto max-w-3xl bg-white shadow-lg rounded-lg p-6">
-        <div class="add-top mb-4 flex justify-center">
+          <div class="add-top mb-4 flex justify-center">
           <label class="select-label w-full md:w-56">
             <select id="add-type" class="w-full border rounded px-3 py-2 bg-white text-sm">
               <option value="expense">Add Expense</option>
               <option value="income">Add Income</option>
               <option value="bill">Add Bill</option>
-              <option value="quick">Quick Chat Add</option>
             </select>
           </label>
         </div>
@@ -184,35 +183,20 @@
             <div class="form-actions mt-4"><button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Add Bill</button></div>
           </form>
 
-          <div id="form-quick" class="form form-block">
-            <h3 class="form-title text-xl font-semibold text-gray-800 mb-3">Quick Add (Chat)</h3>
-            <form id="quick-form" action="/transactions/quick" method="post">
-              <div class="mt-2">
-                <input id="quick-text" name="text" type="text" placeholder="e.g., 'Spent 200 on food today'" class="w-full border px-3 py-2 rounded" />
-              </div>
-              <div class="form-actions mt-4"><button id="quick-add-btn" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Quick Add</button></div>
-            </form>
-          </div>
+          <!-- Quick Add removed per user request -->
         </section>
       </div>
     </main>
 
     <script>
       const typeSelect = document.getElementById('add-type');
-      const blocks = { expense: document.getElementById('form-expense'), income: document.getElementById('form-income'), bill: document.getElementById('form-bill'), quick: document.getElementById('form-quick') };
+      const blocks = { expense: document.getElementById('form-expense'), income: document.getElementById('form-income'), bill: document.getElementById('form-bill') };
       function showBlock(name){
         Object.keys(blocks).forEach(k=>{ blocks[k].classList.remove('show'); });
         blocks[name].classList.add('show');
       }
       typeSelect.addEventListener('change', (e)=> showBlock(e.target.value));
-      // quick add stub behavior (mock)
-      document.getElementById('quick-add-btn').addEventListener('click', (ev)=>{
-        ev.preventDefault();
-        const v = document.getElementById('quick-text').value.trim();
-        if(!v){ alert('Enter quick text'); return; }
-        alert('Quick add received: ' + v);
-        document.getElementById('quick-text').value='';
-      });
+      // Quick Add removed — no JS behavior required
        </script>
 </body>
 </html>

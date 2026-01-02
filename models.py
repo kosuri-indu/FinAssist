@@ -3,11 +3,8 @@ from datetime import datetime
 from db import db
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean, JSON
 
-
 def generate_uuid():
     return str(uuid.uuid4())
-
-
 class User(db.Model):
     __tablename__ = 'users'
     id = Column(String(36), primary_key=True, default=generate_uuid)
@@ -17,7 +14,6 @@ class User(db.Model):
 
     def to_dict(self):
         return {'id': self.id, 'email': self.email, 'created_at': self.created_at.isoformat()}
-
 
 class Category(db.Model):
     __tablename__ = 'categories'

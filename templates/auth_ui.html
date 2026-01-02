@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BillBot - Authentication UI</title>
+    <title>FinAssist - Authentication UI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/auth_ui.css') }}">
 </head>
@@ -11,7 +11,7 @@
     {# Notifications removed from auth UI per user request #}
     <div id="mainCard" class="main-card w-full max-w-md bg-white p-8 md:p-12 rounded-2xl">
         <h1 id="appTitle" class="text-3xl font-extrabold text-[#38A169] text-center mb-8 tracking-wider">
-            BILLBOT
+            FinAssist
         </h1>
         <div id="authContainer">
             <div id="loginView">
@@ -40,12 +40,7 @@
                             </button>
                         </div>
                     </div>
-                    <div class="flex items-center">
-                        <input id="rememberMe" type="checkbox" class="h-4 w-4 text-[#38A169] border-gray-300 rounded focus:ring-[#38A169]">
-                        <label for="rememberMe" class="ml-2 block text-sm text-gray-900">
-                            Keep me signed in
-                        </label>
-                    </div>
+                    <!-- Remember-me removed per user request -->
                     <div>
                         <button type="submit" class="btn-primary w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#38A169]">
                             Login
@@ -58,7 +53,7 @@
                 </form>
             </div>
             <div id="signupView" class="hidden">
-                <h2 class="text-xl font-semibold text-gray-800 text-center mb-6">Join BillBot</h2>
+                <h2 class="text-xl font-semibold text-gray-800 text-center mb-6">Join FinAssist</h2>
                 <form id="signupForm" class="space-y-6" method="post" action="/signup">
                     <div>
                         <label for="signupEmail" class="text-sm font-medium text-gray-700">Email Address</label>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BillBot - Transactions</title>
+    <title>FinAssist - Transactions</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bills.css') }}">
 </head>
@@ -83,7 +83,7 @@
                                 </div>
                                 <div>
                                     <div class="text-sm font-medium text-gray-800">{{ t.description or (t.txn_type|capitalize) }}</div>
-                                    <div class="text-xs text-gray-500">{{ t.category_name or 'Uncategorized' }} • {{ t.occurred_at.strftime('%Y-%m-%d %H:%M') if t.occurred_at }}</div>
+                                    <div class="text-xs text-gray-500">{{ t.category_name or '' }} • {{ t.occurred_at.strftime('%Y-%m-%d %H:%M') if t.occurred_at }}</div>
                                     {% if t.meta %}
                                     <div class="mt-2 flex flex-wrap gap-1">
                                         {% for k,v in t.meta.items() %}
