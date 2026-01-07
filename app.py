@@ -15,6 +15,9 @@ from agents.chat_agent import run_chat_agent
 from agents.insights_agent import run_insights_agent_for_user
 from agents.forecast_agent import run_forecast_agent_for_user
 from agents.reminder_agent import get_upcoming_reminders, mark_bill_paid, run_reminder_agent_for_user
+from agents.web_agent import fetch_url_text, post_action
+from agents.investment_agent import investment_advice
+from agents.langchain_tools import build_investment_agent_llm
 
 def _compute_next_due_from(start_date, period, interval_count=1):
     if not start_date:
@@ -159,6 +162,14 @@ def chat():
     return render_template('chat.html')
 
 
+@app.route('/invest')
+def invest_page():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    return render_template('invest.html')
+
+
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
     """Minimal chat endpoint: accepts JSON {message: '...'} and returns {'reply': '...'}.
@@ -192,6 +203,87 @@ def api_chat():
         db.session.rollback()
 
     return jsonify({'reply': reply})
+
+
+@app.route('/api/web/fetch', methods=['POST'])
+def api_web_fetch():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    data = request.get_json(silent=True) or {}
+    url = data.get('url')
+    if not url:
+        return jsonify({'error': 'no url provided'}), 400
+    try:
+        res = fetch_url_text(url)
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/web/post', methods=['POST'])
+def api_web_post():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    data = request.get_json(silent=True) or {}
+    url = data.get('url')
+    payload = data.get('payload') or {}
+    if not url:
+        return jsonify({'error': 'no url provided'}), 400
+    try:
+        res = post_action(url, payload)
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/invest/advice', methods=['POST'])
+def api_invest_advice():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    data = request.get_json(silent=True) or {}
+    portfolio = data.get('portfolio') or {}
+    goal = data.get('goal')
+    use_agent = bool(data.get('use_agent'))
+    # If LangChain agent is available, use it; otherwise fallback to simple LLM prompt
+    if use_agent:
+        try:
+            agent = build_investment_agent_llm()
+            prompt = f"Portfolio: {json.dumps(portfolio, default=str)}\nUser goal: {goal or ''}\nProvide a concise risk assessment, three suggestions, and short action plan. Use available tools if helpful."
+            # LangChain's agent APIs vary by version. Try run -> invoke -> call patterns.
+            try:
+                resp = agent.run(prompt)
+            except AttributeError:
+                try:
+                    # newer LangChain may support invoke
+                    resp = agent.invoke(prompt)
+                except Exception:
+                    try:
+                        # fallback: some agents are callables / chains expecting dict
+                        out = agent({'input': prompt})
+                        # standard Chain output can be under 'output' or returned directly
+                        resp = out.get('output') if isinstance(out, dict) and out.get('output') else str(out)
+                    except Exception as e_agent_call:
+                        raise RuntimeError('Agent execution failed: ' + str(e_agent_call))
+            except Exception as e:
+                # generic agent execution failure
+                raise
+            return jsonify({'advice': resp})
+        except Exception as e:
+            # fallback to simple investment_advice
+            try:
+                fallback = investment_advice(portfolio, user_goal=goal)
+                return jsonify({'advice': fallback, 'warning': f'agent_error: {e}'}), 200
+            except Exception as e2:
+                return jsonify({'error': str(e), 'fallback_error': str(e2)}), 500
+    else:
+        try:
+            resp = investment_advice(portfolio, user_goal=goal)
+            return jsonify({'advice': resp})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
 
 # Chat agent endpoints removed — agents disabled in this workspace
