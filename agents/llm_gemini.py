@@ -9,7 +9,7 @@ load_dotenv()
 DEFAULT_MODEL = os.environ.get('OPENAI_MODEL') or 'gpt-4o-mini'
 
 
-def call_gemini(prompt: str, model: Optional[str] = None, max_tokens: int = 300, temperature: float = 0.0) -> str:
+def call_gemini(prompt: str, model: Optional[str] = None, max_tokens: int = 300, temperature: float = 0.2) -> str:
     """Call an LLM and return the assistant text.
 
     This implementation uses the OpenAI Python client. Set `OPENAI_API_KEY` in your
@@ -31,7 +31,10 @@ def call_gemini(prompt: str, model: Optional[str] = None, max_tokens: int = 300,
     # Use the chat completions API available in the OpenAI client wrapper.
     resp = client.chat.completions.create(
         model=model_to_use,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {"role": "system", "content": "You are a careful financial reasoning assistant."},
+            {"role": "user", "content": prompt}
+        ],
         # max_tokens=max_tokens,
         temperature=temperature,
     )

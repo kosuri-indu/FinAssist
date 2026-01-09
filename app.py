@@ -323,10 +323,29 @@ def api_invest_advice():
     if use_agent:
         try:
             agent = build_investment_agent_llm()
-            prompt = f"Portfolio: {json.dumps(portfolio, default=str)}\nUser goal: {goal or ''}\nProvide a concise risk assessment, three suggestions, and short action plan. Use available tools if helpful."
+            portfolio_str = ", ".join([f"{ticker} (Quantity: {qty})" for ticker, qty in portfolio.items()])
+            # prompt = f"Portfolio: {json.dumps(portfolio_str, default=str)}\nUser goal: {goal or ''}\nProvide a concise risk assessment, three suggestions, and short action plan. Use available tools if helpful."
+            # prompt = (
+            #     f"Portfolio: {portfolio}\n"
+            #     f"User goal: {goal or 'Not specified'}\n"
+            #     "Analyze the data. IMPORTANT: Your final response MUST start with 'Final Answer:'"
+            # )
+            prompt = (
+                f"Analyze this portfolio: {portfolio_str}. Goal: {goal or 'Long-term growth'}.\n"
+                "Task:\n"
+                "1. Detailed risk and diversification analysis.\n"
+                "2. Alignment check with the user's goal.\n"
+                "3. 3 data-backed strategy suggestions (categories only, with real time examples as advice).\n"
+                "4. A 5-step actionable plan.\n\n"
+                "IMPORTANT: Your final response MUST start with 'Final Answer:' followed by your full report."
+            )
             # LangChain's agent APIs vary by version. Try run -> invoke -> call patterns.
             try:
-                resp = agent.run(prompt)
+                resp = agent.invoke({"input": prompt})
+                # EXTRACT THE OUTPUT STRING
+                final_advice = resp.get('output') if isinstance(resp, dict) else str(resp)
+                
+                return jsonify({'advice': final_advice}) # Return only the string
             except AttributeError:
                 try:
                     # newer LangChain may support invoke
