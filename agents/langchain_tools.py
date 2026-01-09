@@ -75,5 +75,5 @@ def build_investment_agent_llm():
 
     llm = GeminiLLM(model=os.environ.get('GENAI_MODEL') or os.environ.get('GENAI_MODEL') or None, temperature=float(os.environ.get('GENAI_TEMP') or 0.0))
 
-    agent = initialize_agent(lc_tools, llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=False)
+    agent = initialize_agent(lc_tools, llm, agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION, verbose=False)
     return agent
