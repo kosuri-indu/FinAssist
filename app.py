@@ -324,21 +324,141 @@ def api_invest_advice():
         try:
             agent = build_investment_agent_llm()
             portfolio_str = ", ".join([f"{ticker} (Quantity: {qty})" for ticker, qty in portfolio.items()])
-            # prompt = f"Portfolio: {json.dumps(portfolio_str, default=str)}\nUser goal: {goal or ''}\nProvide a concise risk assessment, three suggestions, and short action plan. Use available tools if helpful."
-            # prompt = (
-            #     f"Portfolio: {portfolio}\n"
-            #     f"User goal: {goal or 'Not specified'}\n"
-            #     "Analyze the data. IMPORTANT: Your final response MUST start with 'Final Answer:'"
-            # )
-            prompt = (
-                f"Analyze this portfolio: {portfolio_str}. Goal: {goal or 'Long-term growth'}.\n"
-                "Task:\n"
-                "1. Detailed risk and diversification analysis.\n"
-                "2. Alignment check with the user's goal.\n"
-                "3. 3 data-backed strategy suggestions (categories only, with real time examples as advice).\n"
-                "4. A 5-step actionable plan.\n\n"
-                "IMPORTANT: Your final response MUST start with 'Final Answer:' followed by your full report."
-            )
+            has_portfolio = bool(portfolio and len(portfolio) > 0)
+            has_goal = bool(goal and goal.strip())
+            
+            # Detect if query is a simple price query
+            goal_lower = (goal or "").lower().strip()
+            # Check for price-related phrases (order matters - more specific first)
+            is_simple_price_query = any(phrase in goal_lower for phrase in [
+                "current stock price", "stock price of", "stock price for",
+                "price of", "price for", "what is the price", 
+                "current price", "how much is", "cost of",
+                "what's the price", "what is the stock price"
+            ]) and not any(complex_phrase in goal_lower for complex_phrase in [
+                "compare", "comparison", "analyze", "analysis", "trend", "history", "performance"
+            ])
+            
+            # Build adaptive prompt based on what's provided
+            if has_portfolio and has_goal:
+                # Both portfolio and goal provided - full analysis
+                prompt = (
+                    f"User Query/Goal: {goal}\n"
+                    f"Portfolio: {portfolio_str}\n\n"
+                    "TASK: Provide comprehensive investment analysis with detailed explanations (MINIMUM 300 tokens/words).\n\n"
+                    "REQUIRED STRUCTURE:\n"
+                    "1. Use 'summarize_portfolio' tool to analyze the portfolio first.\n"
+                    "2. Detailed Portfolio Analysis:\n"
+                    "   - Individual stock/asset analysis (risk, performance, position size)\n"
+                    "   - Portfolio risk assessment and diversification analysis\n"
+                    "   - Overall portfolio composition and balance\n"
+                    "3. Goal Alignment Analysis:\n"
+                    "   - How current portfolio aligns with stated goal\n"
+                    "   - Gaps and misalignments\n"
+                    "4. Strategy Recommendations:\n"
+                    "   - 3 data-backed strategy suggestions with specific categories/examples\n"
+                    "   - Rationale for each suggestion\n"
+                    "5. Detailed 5-Step Actionable Plan:\n"
+                    "   - Specific, actionable steps with priorities\n"
+                    "   - Timeline considerations\n"
+                    "6. Use TABLES to present:\n"
+                    "   - Stock comparisons\n"
+                    "   - Portfolio metrics\n"
+                    "   - Risk analysis breakdown\n\n"
+                    "CRITICAL REQUIREMENTS:\n"
+                    "- Response must be MINIMUM 300 tokens/words - provide comprehensive analysis\n"
+                    "- Use available tools for real data\n"
+                    "- Always use tables for comparisons\n"
+                    "- Be detailed and thorough - NO short summaries\n"
+                    "- Your final response MUST start with 'Final Answer:'"
+                )
+            elif has_portfolio and not has_goal:
+                # Portfolio only - portfolio analysis
+                prompt = (
+                    f"Portfolio: {portfolio_str}\n\n"
+                    "TASK: Provide detailed portfolio analysis (MINIMUM 300 tokens/words).\n\n"
+                    "REQUIRED STRUCTURE:\n"
+                    "1. Use 'summarize_portfolio' tool to get detailed portfolio data.\n"
+                    "2. Individual Holdings Analysis:\n"
+                    "   - For each holding: current price, performance, risk level, position size\n"
+                    "   - Individual stock trends and characteristics\n"
+                    "3. Portfolio-Level Analysis:\n"
+                    "   - Risk assessment (overall risk level, concentration risk)\n"
+                    "   - Diversification analysis (sector, asset class, geography)\n"
+                    "   - Portfolio health and balance evaluation\n"
+                    "   - Total portfolio value and allocation percentages\n"
+                    "4. Recommendations:\n"
+                    "   - Specific suggestions for improvement\n"
+                    "   - Rebalancing recommendations (if needed)\n"
+                    "   - Risk mitigation strategies\n"
+                    "5. Use TABLES to present:\n"
+                    "   - Stock-by-stock comparison\n"
+                    "   - Portfolio allocation breakdown\n"
+                    "   - Risk metrics table\n\n"
+                    "CRITICAL REQUIREMENTS:\n"
+                    "- Response must be MINIMUM 300 tokens/words - comprehensive analysis required\n"
+                    "- Use available tools for real data\n"
+                    "- Always use tables for structured data\n"
+                    "- Be detailed and thorough - NO brief summaries\n"
+                    "- Ensure consistent detailed responses every time\n"
+                    "- Your final response MUST start with 'Final Answer:'"
+                )
+            elif has_goal and not has_portfolio:
+                # Goal only or questions - answer questions, use tools for stock prices
+                if is_simple_price_query:
+                    # Simple price query - use get_stock_price
+                    prompt = (
+                        f"User Query: {goal}\n\n"
+                        "TASK: Get the current stock price and return ONLY the price information.\n\n"
+                        "INSTRUCTIONS:\n"
+                        "1. Extract the ticker symbol from the query (e.g., MSFT for Microsoft, AAPL for Apple, GOOGL for Google).\n"
+                        "2. Use the 'get_stock_price' tool to fetch the CURRENT price for the ticker.\n"
+                        "3. The tool will return the actual price with company name and date.\n"
+                        "4. Copy the EXACT price information from the tool output.\n"
+                        "5. Return ONLY the price information - NO financial analysis, NO additional commentary.\n"
+                        "6. Format: State the company name, ticker symbol, and current price.\n\n"
+                        "CRITICAL: You MUST:\n"
+                        "- Use 'get_stock_price' tool for the ticker\n"
+                        "- Copy the EXACT price from tool output (do NOT use placeholders like $XXX.XX or [price])\n"
+                        "- Provide ONLY the price - NO analysis, NO extra information\n"
+                        "- Your final response MUST start with 'Final Answer:' followed by the actual price"
+                    )
+                else:
+                    # Investment question or analysis query
+                    prompt = (
+                        f"User Query: {goal}\n\n"
+                        "TASK: Answer the user's investment question with detailed, comprehensive information (MINIMUM 300 tokens/words).\n\n"
+                        "INSTRUCTIONS:\n"
+                        "1. For SIMPLE stock price queries (e.g., 'what is the price of MSFT'), use 'get_stock_price' tool and copy the EXACT price.\n"
+                        "2. For HISTORICAL analysis or trends, use 'get_stock_history' tool.\n"
+                        "3. For comparisons between multiple stocks/topics, use tools for each and present results in TABLES.\n"
+                        "4. For financial/investment terms or concepts:\n"
+                        "   - Provide clear, comprehensive definitions\n"
+                        "   - Explain key concepts with examples\n"
+                        "   - Compare and contrast when relevant (use tables)\n"
+                        "   - Discuss pros and cons, risks and benefits\n"
+                        "   - Include practical implications\n"
+                        "5. Use TABLES to present:\n"
+                        "   - Comparisons between investment options\n"
+                        "   - Feature comparisons\n"
+                        "   - Pros/cons analysis\n"
+                        "   - Risk/return comparisons\n"
+                        "6. Response Requirements:\n"
+                        "   - MINIMUM 300 tokens/words - comprehensive explanations required\n"
+                        "   - Detailed explanations with examples\n"
+                        "   - Clear structure with headings if appropriate\n"
+                        "   - NEVER use placeholders - always fetch real data using tools\n"
+                        "   - For stock prices, copy EXACT values from tool output\n\n"
+                        "CRITICAL: Use appropriate tools for real data. Provide detailed, comprehensive responses (300+ tokens). "
+                        "Always use tables for comparisons. Your final response MUST start with 'Final Answer:'"
+                    )
+            else:
+                # Neither provided - general investment advice
+                prompt = (
+                    "You are an investment advisor. The user has not provided a specific portfolio or goal.\n"
+                    "Please ask what they would like help with, or provide general investment guidance.\n\n"
+                    "CRITICAL: Your final response MUST start with 'Final Answer:'"
+                )
             # LangChain's agent APIs vary by version. Try run -> invoke -> call patterns.
             try:
                 resp = agent.invoke({"input": prompt})
@@ -365,13 +485,13 @@ def api_invest_advice():
         except Exception as e:
             # fallback to simple investment_advice
             try:
-                fallback = investment_advice(portfolio, user_goal=goal)
+                fallback = investment_advice(portfolio, user_profile=goal)
                 return jsonify({'advice': fallback, 'warning': f'agent_error: {e}'}), 200
             except Exception as e2:
                 return jsonify({'error': str(e), 'fallback_error': str(e2)}), 500
     else:
         try:
-            resp = investment_advice(portfolio, user_goal=goal)
+            resp = investment_advice(portfolio, user_profile=goal)
             return jsonify({'advice': resp})
         except Exception as e:
             return jsonify({'error': str(e)}), 500
