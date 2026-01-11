@@ -174,7 +174,7 @@ def run_insights_agent_for_user(user_id: str, force_ai: bool = False) -> Dict[st
     """
     load_dotenv()
     api_key = os.environ.get('OPENAI_API_KEY')
-    model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+    model = os.environ.get('OPENAI_MODEL', 'gpt-4.1-mini')
 
     context = gather_insight_context(user_id)
     sig = _compute_insight_signature(context)

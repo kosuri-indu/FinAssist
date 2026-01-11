@@ -233,7 +233,7 @@ def run_reminder_agent_for_user(user_id: int, force_ai: bool = False) -> Dict:
     # If caller explicitly asked for an AI-enhanced summary and we have an API key, call OpenAI
     if force_ai:
         api_key = os.environ.get('OPENAI_API_KEY')
-        model = os.environ.get('REMINDER_AGENT_AI_MODEL', 'gpt-4o-mini')
+        model = os.environ.get('REMINDER_AGENT_AI_MODEL', 'gpt-4.1-mini')
         if not api_key:
             # already persisted local summary; return it with a note
             parsed['note'] = 'OPENAI_API_KEY not set; returning local summary.'

@@ -88,7 +88,7 @@ def _compute_forecast_signature(context: Dict[str, Any]) -> str:
 def run_forecast_agent_for_user(user_id: str, force_ai: bool = False) -> Dict[str, Any]:
     load_dotenv()
     api_key = os.environ.get('OPENAI_API_KEY')
-    model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+    model = os.environ.get('OPENAI_MODEL', 'gpt-4.1-mini')
 
     context = gather_forecast_context(user_id)
     # simple heuristic: average last 3 months if data available

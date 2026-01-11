@@ -5,7 +5,7 @@ from typing import Callable, List, Any
 load_dotenv()
 
 from agents.web_agent import fetch_url_text, post_action
-from agents.investment_agent import get_stock_history, summarize_portfolio, investment_advice
+from agents.investment_agent import get_stock_history, get_stock_price, summarize_portfolio, investment_advice
 
 try:
     from langchain.tools import Tool
@@ -25,8 +25,23 @@ def make_tools() -> List[Tool]:
     tools = []
     tools.append(Tool(name='fetch_url_text', func=fetch_url_text, description='Fetch a URL and return extracted text and metadata'))
     tools.append(Tool(name='post_action', func=post_action, description='POST JSON to a URL and return response'))
-    tools.append(Tool(name='get_stock_history', func=get_stock_history, description='Get historical OHLC data for a ticker'))
-    tools.append(Tool(name='summarize_portfolio', func=summarize_portfolio, description='Summarize portfolio positions (ticker->qty)'))
+    tools.append(Tool(
+        name='get_stock_price',
+        func=get_stock_price,
+        description='Get the CURRENT/LATEST stock price for a ticker. Use this for simple price queries like "what is the price of MSFT" or "stock price of Apple". '
+                    'Input: A single ticker symbol (e.g. "AAPL", "MSFT", "GOOGL", "TSLA"). '
+                    'Returns a formatted string with the ACTUAL current price (e.g., "Current stock price of Microsoft Corporation (MSFT): USD 450.23 (as of 2024-01-15)"). '
+                    'CRITICAL: When you use this tool, you MUST copy the EXACT price from the tool output. Do NOT use placeholders like $XXX.XX or [price]. '
+                    'ALWAYS use this tool for simple price queries - do NOT provide analysis, just copy and return the exact price from the tool output.'
+    ))
+    tools.append(Tool(
+        name='get_stock_history', 
+        func=get_stock_history, 
+        description='Get historical OHLC (Open, High, Low, Close) data for a ticker over a period. Use this for historical analysis, trends, or performance over time. '
+                    'Input: A single ticker symbol (e.g. "AAPL", "MSFT", "GOOGL"). '
+                    'Returns historical data including dates and prices. Use this when you need price history, not just current price.'
+    ))
+    tools.append(Tool(name='summarize_portfolio', func=summarize_portfolio, description='Summarize portfolio positions (ticker->qty). Input: dict of ticker->quantity or JSON string.'))
     tools.append(Tool(name='investment_advice', func=investment_advice, description='Get investment advice for a portfolio and goal'))
     return tools
 
@@ -75,5 +90,5 @@ def build_investment_agent_llm():
 
     llm = GeminiLLM(model=os.environ.get('GENAI_MODEL') or os.environ.get('GENAI_MODEL') or None, temperature=float(os.environ.get('GENAI_TEMP') or 0.0))
 
-    agent = initialize_agent(lc_tools, llm, agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION, verbose=False)
+    agent = initialize_agent(lc_tools, llm, agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION, verbose=False, handle_parsing_errors=True)
     return agent

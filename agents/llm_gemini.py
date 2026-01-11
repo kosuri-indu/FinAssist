@@ -6,7 +6,7 @@ load_dotenv()
 
 # Simple OpenAI-backed LLM caller. We keep the function name `call_gemini` so existing
 # code that imports it doesn't need changes; it will use OpenAI behind the scenes.
-DEFAULT_MODEL = os.environ.get('OPENAI_MODEL') or 'gpt-4o-mini'
+DEFAULT_MODEL = os.environ.get('OPENAI_MODEL') or 'gpt-4.1-mini'
 
 
 def call_gemini(prompt: str, model: Optional[str] = None, max_tokens: int = 300, temperature: float = 0.2) -> str:
@@ -32,7 +32,16 @@ def call_gemini(prompt: str, model: Optional[str] = None, max_tokens: int = 300,
     resp = client.chat.completions.create(
         model=model_to_use,
         messages=[
-            {"role": "system", "content": "You are a careful financial reasoning assistant."},
+            # {"role": "system", "content": "You are a careful financial reasoning assistant."},
+            # {"role": "user", "content": prompt}
+            {
+                "role": "system", 
+                "content": (
+                    "You are a versatile Financial Expert. You can define complex terms (like 'P/E Ratio' or 'Liquidity'), "
+                    "check real-time stock prices using tools, and analyze portfolios. "
+                    "Keep explanations simple but professional."
+                )
+            },
             {"role": "user", "content": prompt}
         ],
         # max_tokens=max_tokens,

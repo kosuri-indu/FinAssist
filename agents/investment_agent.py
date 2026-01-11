@@ -21,6 +21,50 @@ def get_stock_history(ticker: str, period: str = "6mo") -> list:
         return [{"error": str(e)}]
 
 
+def get_stock_price(ticker: str) -> str:
+    """Get the current/latest stock price for a ticker. Returns formatted string with current price.
+    
+    This function is optimized for simple price queries and returns a clear, concise response.
+    """
+    try:
+        # Basic ticker sanitization (inline to avoid dependency order issues)
+        ticker_clean = str(ticker).strip().upper()
+        ticker_clean = ticker_clean.strip('\"\'{}[]()')
+        if ticker_clean.startswith('$'):
+            ticker_clean = ticker_clean[1:]
+        ticker_clean = re.sub(r'[^A-Z0-9\.\-]', '', ticker_clean)
+        
+        if not ticker_clean or len(ticker_clean) > 10:
+            return f"Invalid ticker symbol: {ticker}"
+        
+        t = yf.Ticker(ticker_clean)
+        # Get today's data (or most recent trading day)
+        todays_data = t.history(period='1d')
+        if todays_data.empty:
+            # Fallback to 5 days if today has no data (weekend/holiday)
+            todays_data = t.history(period='5d')
+            if todays_data.empty:
+                return f"Unable to fetch price data for {ticker_clean}. The ticker may be invalid or not trading."
+        
+        latest = todays_data.iloc[-1]
+        current_price = float(latest['Close'])
+        
+        # Get company info
+        try:
+            info = t.info
+            company_name = info.get('longName') or info.get('shortName') or ticker_clean
+            currency = info.get('currency', 'USD')
+        except Exception:
+            company_name = ticker_clean
+            currency = 'USD'
+        
+        price_date = latest.name.strftime('%Y-%m-%d') if hasattr(latest.name, 'strftime') else str(latest.name)
+        
+        return f"Current stock price of {company_name} ({ticker_clean}): {currency} {current_price:.2f} (as of {price_date})"
+    except Exception as e:
+        return f"Error fetching stock price for {ticker}: {str(e)}"
+
+
 # --- Helpers: sanitize and validate tickers ---
 TICKER_RE = re.compile(r'^[A-Z0-9\.\-]{1,10}$')
 
