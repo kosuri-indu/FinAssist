@@ -4,29 +4,226 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Add Data</title>
-  <link rel="stylesheet" href="/static/css/common.css">
-  <link rel="stylesheet" href="/static/css/add_data.css">
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/add_data.css') }}">
- </head>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    
+    main.main-content { margin-left: 288px; padding: 2rem; background: #f9fafb; min-height: 100vh; }
+    
+    .page-header { margin-bottom: 2rem; }
+    .page-header h1 { font-size: 2rem; font-weight: 800; color: #111827; }
+    .page-header p { font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem; }
+    
+    .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 2rem; max-width: 48rem; margin: 0 auto; }
+    
+    /* Type selector tabs */
+    .type-tabs { display: flex; gap: 0.5rem; margin-bottom: 2rem; border-bottom: 2px solid #e5e7eb; }
+    
+    .type-tab { 
+      padding: 0.75rem 1.5rem; 
+      border: none; 
+      background: none; 
+      cursor: pointer; 
+      font-size: 0.875rem; 
+      font-weight: 600; 
+      color: #6b7280; 
+      border-bottom: 3px solid transparent; 
+      margin-bottom: -2px;
+      transition: all 0.2s ease;
+    }
+    
+    .type-tab:hover { color: #374151; }
+    
+    .type-tab.active { 
+      color: #1f2937; 
+      border-bottom-color: #10b981; 
+    }
+    
+    .type-tab.expense.active { border-bottom-color: #ef4444; }
+    .type-tab.income.active { border-bottom-color: #10b981; }
+    .type-tab.bill.active { border-bottom-color: #3b82f6; }
+    
+    .type-tab span { font-size: 1.25rem; margin-right: 0.5rem; }
+    
+    /* Form sections */
+    .form-section { display: none; }
+    .form-section.active { display: block; animation: fadeIn 0.2s ease; }
+    
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    
+    .form-section h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
+    
+    .form-section.expense h2 { color: #dc2626; }
+    .form-section.income h2 { color: #16a34a; }
+    .form-section.bill h2 { color: #2563eb; }
+    
+    /* Form grid */
+    .form-grid { display: grid; gap: 1.25rem; }
+    .form-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    
+    @media (max-width: 768px) {
+      .form-row { grid-template-columns: 1fr; }
+      main.main-content { margin-left: 0; padding: 1rem; }
+      .card { padding: 1.5rem; }
+    }
+    
+    /* Form elements */
+    label { display: block; margin-bottom: 0.5rem; }
+    label > div:first-child { font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.375rem; }
+    
+    input[type="text"], 
+    input[type="date"], 
+    input[type="number"],
+    select, 
+    textarea { 
+      width: 100%; 
+      padding: 0.625rem 0.875rem; 
+      border: 1px solid #d1d5db; 
+      border-radius: 6px; 
+      font-size: 0.875rem; 
+      font-family: inherit;
+      transition: all 0.2s ease;
+      background-color: white;
+      color: #111827;
+    }
+    
+    /* Dropdown styling */
+    select {
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 0.5rem center;
+      background-size: 1.25rem;
+      padding-right: 2rem;
+      cursor: pointer;
+    }
+    
+    select:hover { 
+      border-color: #6b7280; 
+      background-color: #f9fafb;
+    }
+    
+    select:disabled { 
+      opacity: 0.6; 
+      cursor: not-allowed; 
+      background-color: #f3f4f6;
+    }
+    
+    input[type="text"]:focus, 
+    input[type="date"]:focus, 
+    input[type="number"]:focus,
+    select:focus, 
+    textarea:focus { 
+      outline: none; 
+      border-color: #3b82f6; 
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); 
+    }
+    
+    /* Invalid input styling */
+    input:invalid:not(:placeholder-shown),
+    select:invalid:not([value=""]),
+    textarea:invalid:not(:placeholder-shown) {
+      border-color: #ef4444;
+    }
+    
+    input:invalid:not(:placeholder-shown):focus,
+    select:invalid:focus,
+    textarea:invalid:not(:placeholder-shown):focus {
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    }
+    
+    /* Required field indicator */
+    label > div:first-child::after {
+      content: ' *';
+      color: #ef4444;
+      display: inline;
+    }
+    
+    label > div:first-child.optional::after {
+      content: ' (Optional)';
+      color: #6b7280;
+      font-size: 0.75rem;
+    }
+    
+    textarea { resize: vertical; min-height: 80px; }
+    
+    /* Submit buttons */
+    .form-actions { margin-top: 2rem; }
+    
+    button[type="submit"] { 
+      width: 100%; 
+      padding: 0.75rem; 
+      border: none; 
+      border-radius: 6px; 
+      font-size: 0.875rem; 
+      font-weight: 600; 
+      cursor: pointer; 
+      color: white;
+      transition: all 0.2s ease;
+    }
+    
+    .form-section.expense button[type="submit"] { background-color: #dc2626; }
+    .form-section.expense button[type="submit"]:hover { background-color: #b91c1c; }
+    
+    .form-section.income button[type="submit"] { background-color: #16a34a; }
+    .form-section.income button[type="submit"]:hover { background-color: #15803d; }
+    
+    .form-section.bill button[type="submit"] { background-color: #2563eb; }
+    .form-section.bill button[type="submit"]:hover { background-color: #1d4ed8; }
+    
+    button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
+    
+    /* Toast notifications */
+    .toast { 
+      position: fixed; 
+      bottom: 2rem; 
+      right: 2rem; 
+      padding: 1rem 1.5rem; 
+      border-radius: 6px; 
+      background: white; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn { 
+      from { transform: translateX(400px); opacity: 0; } 
+      to { transform: translateX(0); opacity: 1; } 
+    }
+    
+    .toast.success { border-left: 4px solid #10b981; color: #047857; }
+    .toast.error { border-left: 4px solid #dc2626; color: #991b1b; }
+    
+    @media (max-width: 640px) {
+      .toast { bottom: 1rem; right: 1rem; left: 1rem; }
+    }
+  </style>
+</head>
 <body>
     {% include 'sidebar.html' %}
 
-    <main class="main-content ml-72 p-8">
-      <header class="page-header mb-6"><h1 class="text-3xl font-extrabold text-gray-900">Add Data</h1></header>
+    <main class="main-content">
+      <div class="page-header">
+        <h1>Add Financial Data</h1>
+        <p>Track your expenses, income, and recurring bills</p>
+      </div>
 
-      <div class="card mx-auto max-w-3xl bg-white shadow-lg rounded-lg p-6">
-          <div class="add-top mb-4 flex justify-center">
-          <label class="select-label w-full md:w-56">
-            <select id="add-type" class="w-full border rounded px-3 py-2 bg-white text-sm">
-              <option value="expense">Add Expense</option>
-              <option value="income">Add Income</option>
-              <option value="bill">Add Bill</option>
-            </select>
-          </label>
+      <div class="card">
+        <!-- Type selector tabs -->
+        <div class="type-tabs">
+          <button class="type-tab active expense" data-type="expense">
+            <span>💸</span>Expense
+          </button>
+          <button class="type-tab income" data-type="income">
+            <span>💰</span>Income
+          </button>
+          <button class="type-tab bill" data-type="bill">
+            <span>📄</span>Bill
+          </button>
         </div>
 
-        <!-- global category suggestions -->
+        <!-- Category suggestions datalist -->
         <datalist id="categories">
           <option>Food</option>
           <option>Groceries</option>
@@ -70,134 +267,358 @@
           <option>Maintenance</option>
         </datalist>
 
-        <section class="add-forms">
-          <form id="form-expense" class="form form-block show" action="/transactions/create" method="post">
-            <h3 class="form-title text-lg font-semibold text-gray-800 mb-3">Add Expense</h3>
+        <!-- EXPENSE FORM -->
+        <div class="form-section expense active">
+          <h2><span>💸</span>Add Expense</h2>
+          <form id="form-expense" action="/transactions/create" method="post" class="form-grid">
             <input type="hidden" name="txn_type" value="expense">
-            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Amount</div>
-                <input name="amount" type="text" placeholder="₹" class="w-full border px-3 py-2 rounded" />
+            
+            <div class="form-row">
+              <label>
+                <div>Amount (₹)</div>
+                <input name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
               </label>
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Category</div>
-                <input name="category" list="categories" placeholder="Start typing or pick a category" class="w-full border px-3 py-2 rounded" />
+              <label>
+                <div>Category</div>
+                <select name="category" required>
+                  <option value="">-- Select Category --</option>
+                  <option>Food & Dining</option>
+                  <option>Groceries</option>
+                  <option>Restaurants</option>
+                  <option>Transport & Travel</option>
+                  <option>Taxi/Cab</option>
+                  <option>Fuel</option>
+                  <option>Public Transport</option>
+                  <option>Housing</option>
+                  <option>Rent</option>
+                  <option>Maintenance</option>
+                  <option>Utilities</option>
+                  <option>Electricity</option>
+                  <option>Water</option>
+                  <option>Gas</option>
+                  <option>Internet & Mobile</option>
+                  <option>Internet</option>
+                  <option>Mobile/Phone</option>
+                  <option>Insurance</option>
+                  <option>Health & Medical</option>
+                  <option>Medicine</option>
+                  <option>Doctor Visit</option>
+                  <option>Fitness & Wellness</option>
+                  <option>Gym Membership</option>
+                  <option>Shopping & Entertainment</option>
+                  <option>Clothing</option>
+                  <option>Entertainment</option>
+                  <option>Movies & Events</option>
+                  <option>Books & Education</option>
+                  <option>Education</option>
+                  <option>Subscriptions</option>
+                  <option>Other Expenses</option>
+                  <option>Gifts & Charity</option>
+                  <option>Pets</option>
+                  <option>Miscellaneous</option>
+                </select>
               </label>
             </div>
-            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Date</div>
-                <input name="occurred_at" type="date" class="w-full border px-3 py-2 rounded" />
+            
+            <div class="form-row">
+              <label>
+                <div>Date</div>
+                <input name="occurred_at" type="date" required />
               </label>
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Payment Mode</div>
-                <select name="payment_mode" class="w-full border px-3 py-2 rounded text-sm">
-                  <option>Cash</option>
+              <label>
+                <div>Payment Mode</div>
+                <select name="payment_mode" required>
+                  <option value="">-- Select Mode --</option>
+                  <option selected>Cash</option>
                   <option>Debit Card</option>
                   <option>Credit Card</option>
                   <option>UPI</option>
-                  <option>Netbanking</option>
+                  <option>Net Banking</option>
                   <option>Bank Transfer</option>
-                  <option>Mobile Wallet (Paytm)</option>
-                  <option>Mobile Wallet (PhonePe)</option>
-                  <option>Mobile Wallet (Google Pay)</option>
+                  <option>Mobile Wallet</option>
                   <option>Cheque</option>
-                  <option>Direct Debit</option>
-                  <option>Standing Order</option>
                   <option>Other</option>
                 </select>
               </label>
             </div>
-            <div class="mt-3">
-              <div class="text-sm font-semibold text-gray-700 mb-1">Description</div>
-              <textarea name="description" rows="3" class="w-full border px-3 py-2 rounded"></textarea>
+            
+            <label class="form-row full">
+              <div class="optional">Description</div>
+              <textarea name="description" placeholder="Add any notes, merchant details, etc..."></textarea>
+            </label>
+            
+            <div class="form-actions">
+              <button type="submit">💸 Add Expense</button>
             </div>
-            <div class="form-actions mt-4"><button class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Add Expense</button></div>
           </form>
+        </div>
 
-          <form id="form-income" class="form form-block" action="/transactions/create" method="post">
-            <h3 class="form-title text-xl font-semibold text-gray-800 mb-3">Add Income</h3>
+        <!-- INCOME FORM -->
+        <div class="form-section income">
+          <h2><span>💰</span>Add Income</h2>
+          <form id="form-income" action="/transactions/create" method="post" class="form-grid">
             <input type="hidden" name="txn_type" value="income">
-            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Amount</div>
-                <input name="amount" type="text" placeholder="₹" class="w-full border px-3 py-2 rounded" />
+            
+            <div class="form-row">
+              <label>
+                <div>Amount (₹)</div>
+                <input name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
               </label>
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Category</div>
-                <input name="category" list="categories" placeholder="Salary, Freelance, etc." class="w-full border px-3 py-2 rounded" />
-              </label>
-            </div>
-            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Date</div>
-                <input name="occurred_at" type="date" class="w-full border px-3 py-2 rounded" />
-              </label>
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Source</div>
-                <input name="source" type="text" placeholder="Employer/Client" class="w-full border px-3 py-2 rounded" />
-              </label>
-            </div>
-            <div class="mt-3">
-              <div class="text-sm font-semibold text-gray-700 mb-1">Description</div>
-              <textarea name="description" rows="3" class="w-full border px-3 py-2 rounded"></textarea>
-            </div>
-            <div class="form-actions mt-4"><button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add Income</button></div>
-          </form>
-
-          <form id="form-bill" class="form form-block" action="/bills/create" method="post">
-            <h3 class="form-title text-xl font-semibold text-gray-800 mb-3">Add Bill</h3>
-            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Bill Name</div>
-                <input name="name" type="text" class="w-full border px-3 py-2 rounded" />
-              </label>
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Amount</div>
-                <input name="amount" type="text" placeholder="₹" class="w-full border px-3 py-2 rounded" />
-              </label>
-            </div>
-            <div class="row grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">First Due Date</div>
-                <input name="first_payment_date" type="date" class="w-full border px-3 py-2 rounded" />
-              </label>
-              <label class="block">
-                <div class="text-sm font-semibold text-gray-700 mb-1">Recurring Type</div>
-                <select name="recurring_type" class="w-full border px-3 py-2 rounded text-sm">
-                  <option>one-time</option>
-                  <option>monthly</option>
-                  <option>quarterly</option>
-                  <option>yearly</option>
+              <label>
+                <div>Source</div>
+                <select name="category" required>
+                  <option value="">-- Select Source --</option>
+                  <option selected>Salary</option>
+                  <option>Freelance Work</option>
+                  <option>Bonus</option>
+                  <option>Investment Income</option>
+                  <option>Interest</option>
+                  <option>Rental Income</option>
+                  <option>Business Income</option>
+                  <option>Gift</option>
+                  <option>Refund</option>
+                  <option>Reimbursement</option>
+                  <option>Other Income</option>
                 </select>
               </label>
             </div>
-            <div class="mt-3">
-              <div class="text-sm font-semibold text-gray-700 mb-1">Category</div>
-              <input name="tag" list="categories" class="w-full border px-3 py-2 rounded" />
+            
+            <div class="form-row">
+              <label>
+                <div>Date</div>
+                <input name="occurred_at" type="date" required />
+              </label>
+              <label>
+                <div>Payer/Source Name</div>
+                <input name="source" type="text" placeholder="e.g., Acme Corp" required />
+              </label>
             </div>
-            <div class="mt-3">
-              <div class="text-sm font-semibold text-gray-700 mb-1">Reminder (text)</div>
-              <input name="reminder_text" type="text" placeholder="e.g., pay before 5th" class="w-full border px-3 py-2 rounded" />
+            
+            <label class="form-row full">
+              <div class="optional">Description</div>
+              <textarea name="description" placeholder="Add any notes..."></textarea>
+            </label>
+            
+            <div class="form-actions">
+              <button type="submit">💰 Add Income</button>
             </div>
-            <div class="form-actions mt-4"><button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Add Bill</button></div>
           </form>
+        </div>
 
-          <!-- Quick Add removed per user request -->
-        </section>
+        <!-- BILL FORM -->
+        <div class="form-section bill">
+          <h2><span>📄</span>Add Bill</h2>
+          <form id="form-bill" action="/bills/create" method="post" class="form-grid">
+            
+            <div class="form-row">
+              <label>
+                <div>Bill Name</div>
+                <input name="name" type="text" placeholder="e.g., Electricity Bill" required />
+              </label>
+              <label>
+                <div>Amount (₹)</div>
+                <input name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
+              </label>
+            </div>
+            
+            <div class="form-row">
+              <label>
+                <div>Category</div>
+                <select name="tag" required>
+                  <option value="">-- Select Category --</option>
+                  <option selected>Utilities - Electricity</option>
+                  <option>Utilities - Water</option>
+                  <option>Utilities - Gas</option>
+                  <option>Internet & Mobile</option>
+                  <option>Internet</option>
+                  <option>Mobile/Phone</option>
+                  <option>Insurance</option>
+                  <option>Health Insurance</option>
+                  <option>Home Insurance</option>
+                  <option>Auto Insurance</option>
+                  <option>Housing</option>
+                  <option>Rent</option>
+                  <option>Mortgage</option>
+                  <option>HOA Fees</option>
+                  <option>Subscriptions</option>
+                  <option>Streaming Services</option>
+                  <option>Gym Membership</option>
+                  <option>Software Subscription</option>
+                  <option>Transport</option>
+                  <option>Car Payment</option>
+                  <option>Fuel Card</option>
+                  <option>Loan Payment</option>
+                  <option>Education</option>
+                  <option>Pet Care</option>
+                  <option>Other Bills</option>
+                </select>
+              </label>
+              <label>
+                <div>Frequency</div>
+                <select name="recurring_type" required>
+                  <option value="one-time">One-time</option>
+                  <option value="monthly" selected>Monthly</option>
+                  <option value="quarterly">Quarterly (3 months)</option>
+                  <option value="bi-annual">Bi-annual (6 months)</option>
+                  <option value="yearly">Yearly (12 months)</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+            </div>
+            
+            <div class="form-row">
+              <label>
+                <div>First Due Date</div>
+                <input name="first_payment_date" type="date" required />
+              </label>
+              <label>
+                <div>Bill Duration</div>
+                <select name="bill_duration" required>
+                  <option value="forever" selected>Forever (Ongoing)</option>
+                  <option value="limited">Limited Period</option>
+                </select>
+              </label>
+            </div>
+            
+            <div id="expiry-section" class="form-row" style="display: none;">
+              <label>
+                <div class="optional">End/Expiry Date</div>
+                <input name="end_date" type="date" />
+              </label>
+              <label>
+                <div class="optional">Expected Cycles</div>
+                <input name="expected_cycles" type="number" min="1" placeholder="e.g., 12" />
+              </label>
+            </div>
+            
+            <label class="form-row full">
+              <div class="optional">Reminder Note</div>
+              <input name="reminder_text" type="text" placeholder="e.g., Pay before 5th of the month or any important notes" />
+            </label>
+            
+            <div class="form-actions">
+              <button type="submit">📄 Add Bill</button>
+            </div>
+          </form>
+        </div>
       </div>
     </main>
 
     <script>
-      const typeSelect = document.getElementById('add-type');
-      const blocks = { expense: document.getElementById('form-expense'), income: document.getElementById('form-income'), bill: document.getElementById('form-bill') };
-      function showBlock(name){
-        Object.keys(blocks).forEach(k=>{ blocks[k].classList.remove('show'); });
-        blocks[name].classList.add('show');
+      // Tab switching
+      document.querySelectorAll('.type-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+          const type = this.dataset.type;
+          
+          // Update active tab
+          document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
+          this.classList.add('active');
+          
+          // Update active form
+          document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
+          document.querySelector(`.form-section.${type}`).classList.add('active');
+        });
+      });
+      
+      // Set today's date by default
+      document.querySelectorAll('input[type="date"]').forEach(input => {
+        if (!input.value) {
+          const today = new Date().toISOString().split('T')[0];
+          input.value = today;
+        }
+      });
+      
+      // Show/hide expiry date based on bill duration selection
+      const billDurationSelect = document.querySelector('select[name="bill_duration"]');
+      const expirySection = document.getElementById('expiry-section');
+      
+      if (billDurationSelect) {
+        billDurationSelect.addEventListener('change', function() {
+          if (this.value === 'limited') {
+            expirySection.style.display = 'grid';
+          } else {
+            expirySection.style.display = 'none';
+          }
+        });
       }
-      typeSelect.addEventListener('change', (e)=> showBlock(e.target.value));
-      // Quick Add removed — no JS behavior required
-       </script>
+      
+      // Form submission with toast notification
+      document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', async function(e) {
+          e.preventDefault();
+          const btn = this.querySelector('button[type="submit"]');
+          
+          // Validate required fields
+          const requiredFields = this.querySelectorAll('[required]');
+          let isValid = true;
+          let firstInvalidField = null;
+          
+          requiredFields.forEach(field => {
+            if (!field.value || field.value.trim() === '') {
+              isValid = false;
+              field.style.borderColor = '#ef4444';
+              if (!firstInvalidField) firstInvalidField = field;
+            } else {
+              field.style.borderColor = '#d1d5db';
+            }
+          });
+          
+          if (!isValid) {
+            showToast('❌ Please fill in all required fields', 'error');
+            if (firstInvalidField) firstInvalidField.focus();
+            return;
+          }
+          
+          // Validate amount field
+          const amountField = this.querySelector('input[name="amount"]');
+          if (amountField) {
+            const amount = parseFloat(amountField.value);
+            if (isNaN(amount) || amount <= 0) {
+              showToast('❌ Please enter a valid amount greater than 0', 'error');
+              amountField.focus();
+              return;
+            }
+          }
+          
+          btn.disabled = true;
+          
+          try {
+            const res = await fetch(this.action, {
+              method: 'POST',
+              body: new FormData(this)
+            });
+            
+            if (res.ok) {
+              showToast('✅ Added successfully!', 'success');
+              this.reset();
+              // Reset date to today
+              const today = new Date().toISOString().split('T')[0];
+              this.querySelectorAll('input[type="date"]').forEach(input => input.value = today);
+              // Reset border colors
+              requiredFields.forEach(field => field.style.borderColor = '#d1d5db');
+            } else {
+              showToast('❌ Failed to add. Please check your input.', 'error');
+            }
+          } catch (e) {
+            showToast('❌ Error: ' + e.message, 'error');
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
+      
+      function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+          toast.style.animation = 'slideOut 0.3s ease forwards';
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+    </script>
 </body>
 </html>
   

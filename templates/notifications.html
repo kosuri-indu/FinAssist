@@ -18,45 +18,43 @@
           </div>
           <div class="flex items-center gap-2">
             <a href="/agents" class="text-sm px-3 py-1 bg-gray-100 rounded">Agents Center</a>
-            <button id="refresh-summary" class="text-sm px-3 py-1 bg-gray-200 text-gray-800 rounded">Refresh Summary</button>
-            <button id="force-ai-reminder" class="text-sm px-3 py-1 bg-blue-600 text-white rounded">Force AI Summary</button>
+            <button id="refresh-summary" class="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition">Refresh Summary</button>
           </div>
         </div>
         <div id="agent-summary-container">
         {% if agent_summary %}
           {# agent_summary may be a dict with message/details or a plain string; handle both #}
           {% if agent_summary is mapping %}
-            <div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
-              <div class="flex items-start justify-between">
-                <div>
-                  <div class="text-sm font-semibold text-blue-800">Smart Reminder</div>
-                  <div id="agent-summary-message" class="text-sm text-blue-700 mt-2">{{ agent_summary.message }}</div>
+            <div class="mb-4 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm">
+              <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <span class="text-2xl">💰</span>
+                  <div class="text-base font-bold text-gray-900">Payment Intelligence</div>
                 </div>
-                <div class="text-xs text-gray-500">Cached</div>
+                <div class="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded font-medium">Smart Analysis</div>
               </div>
 
-              <div id="agent-summary-details" class="mt-3 text-sm text-gray-700">
-                <div class="mb-2">Total: <strong>₹{{ agent_summary.details.total_rupees }}</strong> • {{ agent_summary.details.count }} bill{{ 's' if agent_summary.details.count != 1 else '' }}</div>
-                <div>
-                  <table class="w-full text-left text-sm">
-                    <thead>
-                      <tr class="text-xs text-gray-500">
-                        <th>Due</th><th>Bill</th><th>Amount</th><th>Days</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for b in agent_summary.details.bills %}
-                      <tr class="border-t">
-                        <td class="py-1">{{ b.due_date or '-' }}</td>
-                        <td class="py-1">{{ b.name }}</td>
-                        <td class="py-1">₹{{ '%.2f'|format(b.amount_rupees) }}</td>
-                        <td class="py-1">{{ b.days_until if b.days_until is not none else '-' }}</td>
-                      </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="bg-white rounded-lg p-3 border-2 border-blue-300">
+                  <div class="text-xs text-gray-600 mb-1">Total Due</div>
+                  <div class="text-2xl font-bold text-blue-600">₹{{ "{:,.0f}".format(agent_summary.details.total_rupees) }}</div>
+                </div>
+                <div class="bg-white rounded-lg p-3 border-2 border-gray-300">
+                  <div class="text-xs text-gray-600 mb-1">Bills Count</div>
+                  <div class="text-2xl font-bold text-gray-700">{{ agent_summary.details.count }}</div>
                 </div>
               </div>
+
+              <div id="agent-summary-message" class="formatted-message"></div>
+              <script>
+                (function(){
+                  const msgEl = document.getElementById('agent-summary-message');
+                  if(msgEl){
+                    const raw = {{ agent_summary.message|tojson }};
+                    msgEl.innerHTML = formatMessage(raw);
+                  }
+                })();
+              </script>
             </div>
           {% else %}
             <div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
@@ -70,37 +68,28 @@
         <div class="space-y-3">
           {% if notifications is defined and notifications|length > 0 %}
             {% for n in notifications %}
-            <div class="flex items-start gap-4 bg-white border rounded-lg p-4 shadow-sm">
-              <div class="flex-shrink-0 mt-1">
+            <div class="flex items-center gap-4 bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition" id="notif-{{ n.id }}">
+              <div class="flex-shrink-0">
                 {% if n.type == 'reminder' %}
-                  <div class="h-10 w-10 rounded-md bg-yellow-100 flex items-center justify-center text-yellow-800">R</div>
+                  <div class="h-12 w-12 rounded-md bg-yellow-100 flex items-center justify-center text-yellow-800 text-xl">💳</div>
                 {% elif n.type == 'alert' %}
-                  <div class="h-10 w-10 rounded-md bg-red-100 flex items-center justify-center text-red-800">A</div>
+                  <div class="h-12 w-12 rounded-md bg-red-100 flex items-center justify-center text-red-800 text-xl">⚠️</div>
                 {% else %}
-                  <div class="h-10 w-10 rounded-md bg-blue-100 flex items-center justify-center text-blue-800">i</div>
+                  <div class="h-12 w-12 rounded-md bg-blue-100 flex items-center justify-center text-blue-800 text-xl">ℹ️</div>
                 {% endif %}
               </div>
               <div class="flex-1">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <div class="text-sm font-semibold text-gray-800">{{ n.title }}</div>
-                    <div class="text-sm text-gray-600 mt-1">{{ n.body }}</div>
-                  </div>
-                  <div class="text-xs text-gray-500">{{ n.created_at }}</div>
-                </div>
-                <div class="mt-3 flex gap-2">
-                    {% if n.type == 'reminder' %}
-                    <form method="post" action="/notifications/{{ n.id }}/mark_done">
-                      <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded text-sm">✓ Paid</button>
-                    </form>
-                    {% endif %}
-                    <form method="post" action="/notifications/{{ n.id }}/mark_read">
-                      <button class="px-3 py-1 bg-gray-100 text-gray-800 rounded text-sm">Mark as read</button>
-                    </form>
-                    <form method="post" action="/notifications/{{ n.id }}/dismiss">
-                      <button class="px-3 py-1 bg-transparent border border-gray-200 text-gray-600 rounded text-sm">Dismiss</button>
-                    </form>
-                </div>
+                <div class="text-sm font-semibold text-gray-800">{{ n.title }}</div>
+                <div class="text-xs text-gray-500 mt-1">{{ n.created_at }}</div>
+              </div>
+              <div class="text-right mr-4">
+                <div class="text-2xl font-bold text-gray-900">₹{{ n.body.split('₹')[1].split()[0] if '₹' in n.body else '0' }}</div>
+                <div class="text-xs text-gray-500 mt-1">{{ n.body.split('Due:')[1].split('•')[0].strip() if 'Due:' in n.body else '' }}</div>
+              </div>
+              <div class="flex-shrink-0">
+                {% if n.type == 'reminder' %}
+                <button class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition" onclick="markPaid('{{ n.id }}')" style="cursor: pointer;">✓ Mark Paid</button>
+                {% endif %}
               </div>
             </div>
             {% endfor %}
@@ -112,27 +101,151 @@
         </div>
     </main>
     <script>
-      (function(){
-        const refreshBtn = document.getElementById('refresh-summary');
-        const forceBtn = document.getElementById('force-ai-reminder');
+      // Preserve summary when switching tabs/pages
+      let cachedSummaryHTML = null;
+      
+      function saveSummaryToCache(){
         const container = document.getElementById('agent-summary-container');
-
-        function showToast(msg){
-          try{
-            // simple toast: append a transient div
-            const t = document.createElement('div');
-            t.textContent = msg;
-            t.className = 'fixed bottom-6 right-6 bg-gray-800 text-white px-4 py-2 rounded shadow';
-            document.body.appendChild(t);
-            setTimeout(()=>{ t.remove(); }, 3500);
-          }catch(e){ console.warn(e); }
+        if(container){
+          cachedSummaryHTML = container.innerHTML;
+          sessionStorage.setItem('finassist_summary_cache', cachedSummaryHTML);
         }
+      }
+      
+      function restoreSummaryFromCache(){
+        const container = document.getElementById('agent-summary-container');
+        if(container && cachedSummaryHTML){
+          container.innerHTML = cachedSummaryHTML;
+        }
+      }
+      
+      // Save summary before unloading
+      window.addEventListener('beforeunload', saveSummaryToCache);
+      
+      function initializeNotificationHandlers(){
+        const refreshBtn = document.getElementById('refresh-summary');
+        if(refreshBtn){
+          // Remove all old listeners
+          const newBtn = refreshBtn.cloneNode(true);
+          refreshBtn.parentNode.replaceChild(newBtn, refreshBtn);
+          // Add new listener
+          newBtn.addEventListener('click', onRefreshSummary);
+        }
+        
+        const markPaidBtns = document.querySelectorAll('button[onclick*="markPaid"]');
+        markPaidBtns.forEach(btn => {
+          const newBtn = btn.cloneNode(true);
+          btn.parentNode.replaceChild(newBtn, btn);
+          const onclickStr = newBtn.getAttribute('onclick');
+          const match = onclickStr.match(/'([^']+)'/);
+          if(match){
+            const billId = match[1];
+            newBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              markPaid(billId);
+            });
+            newBtn.removeAttribute('onclick');
+          }
+        });
+      }
+      
+      function onRefreshSummary(e){
+        e.preventDefault();
+        fetchSummary(false);
+      }
+      
+      // Setup page load hook properly
+      (function(){
+        const previousOnPageLoad = window.onPageLoad;
+        window.onPageLoad = function(){
+          // Call previous handler if it exists
+          if(typeof previousOnPageLoad === 'function'){
+            try { previousOnPageLoad(); } catch(e) { console.warn('Previous onPageLoad error:', e); }
+          }
+          restoreSummaryFromCache();
+          initializeNotificationHandlers();
+        };
+      })();
+      
+      // Initialize on initial load
+      initializeNotificationHandlers();
+      
+      // Restore from cache if available
+      try {
+        const cached = sessionStorage.getItem('finassist_summary_cache');
+        if(cached){
+          const container = document.getElementById('agent-summary-container');
+          if(container){
+            container.innerHTML = cached;
+            cachedSummaryHTML = cached;
+          }
+        }
+      } catch(e) {
+        console.warn('Could not restore summary cache:', e);
+      }
+      function formatMessage(text){
+        if(!text) return '';
+        
+        // Split by double newlines to get sections
+        const sections = text.split('\n\n');
+        let html = '';
+        
+        sections.forEach((section, idx) => {
+          // Replace **text** with <strong>text</strong>
+          section = section.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-gray-900">$1</strong>');
+          
+          // Check if section starts with a heading (bold text followed by colon)
+          const headingMatch = section.match(/^<strong[^>]*>([^<]+):<\/strong>/);
+          if(headingMatch) {
+            // This is a section with a heading
+            const heading = headingMatch[0];
+            const content = section.substring(heading.length).trim();
+            html += `<div class="mb-4 p-4 bg-white rounded-lg border-l-4 ${getSectionColor(idx)} shadow-sm">
+              <div class="text-sm font-bold text-gray-800 mb-2">${heading.replace(':', '')}</div>
+              <div class="text-sm text-gray-700 leading-relaxed">${content}</div>
+            </div>`;
+          } else {
+            // Regular paragraph
+            html += `<div class="mb-3 text-sm text-gray-700 leading-relaxed">${section}</div>`;
+          }
+        });
+        
+        return html;
+      }
+      
+      // Get color scheme for different section types
+      function getSectionColor(index) {
+        const colors = [
+          'border-red-400',    // Overview/Urgent
+          'border-blue-400',   // Priority
+          'border-purple-400', // Largest
+          'border-green-400'   // Strategy
+        ];
+        return colors[index % colors.length] || 'border-gray-400';
+      }
 
-        async function fetchSummary(force){
-          const btn = force ? forceBtn : refreshBtn;
+      // Global toast function
+      function showToast(msg){
+        try{
+          const t = document.createElement('div');
+          t.textContent = msg;
+          t.className = 'fixed bottom-6 right-6 bg-gray-800 text-white px-4 py-2 rounded shadow z-50';
+          document.body.appendChild(t);
+          setTimeout(()=>{ t.remove(); }, 3500);
+        }catch(e){ console.warn(e); }
+      }
+
+      // Global fetchSummary function (used by both button and mark paid)
+      let refreshBtn = null;
+      let container = null;
+      
+      async function fetchSummary(force){
+        refreshBtn = refreshBtn || document.getElementById('refresh-summary');
+        container = container || document.getElementById('agent-summary-container');
+          const btn = refreshBtn;
           if(btn) btn.disabled = true;
           const origText = btn ? btn.textContent : '';
-          if(btn) btn.textContent = force ? 'Forcing…' : 'Refreshing…';
+          if(btn) btn.textContent = 'Refreshing…';
           try{
             const body = force ? JSON.stringify({force_ai:true}) : JSON.stringify({});
             const r = await fetch('/api/agents/reminders/run', { method: 'POST', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body});
@@ -156,23 +269,21 @@
               } else {
                 const total = (res.details && res.details.total_rupees) ? res.details.total_rupees : 0;
                 const count = (res.details && typeof res.details.count !== 'undefined') ? res.details.count : (res.bills?res.bills.length:0);
-                html = `<div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">`+
-                       `<div class="flex items-start justify-between"><div><div class="text-sm font-semibold text-blue-800">Smart Reminder</div><div id="agent-summary-message" class="text-sm text-blue-700 mt-2">${res.message || ''}</div></div><div class="text-xs text-gray-500">${force? 'AI' : 'Cached'}</div></div>`+
-                       `<div class="mt-3 text-sm text-gray-700"><div class="mb-2">Total: <strong>₹${total}</strong> • ${count} bill${count!==1?'s':''}</div>`;
-                if(res.details && res.details.bills && res.details.bills.length){
-                  html += `<div><table class="w-full text-left text-sm"><thead><tr class="text-xs text-gray-500"><th>Due</th><th>Bill</th><th>Amount</th><th>Days</th></tr></thead><tbody>`;
-                  for(const b of res.details.bills){
-                    html += `<tr class="border-t"><td class="py-1">${b.due_date || '-'}</td><td class="py-1">${b.name}</td><td class="py-1">₹${(b.amount_rupees||0).toFixed?b.amount_rupees.toFixed(2):(b.amount_rupees||0)}</td><td class="py-1">${(b.days_until!==null && typeof b.days_until !== 'undefined')?b.days_until:'-'}</td></tr>`;
-                  }
-                  html += `</tbody></table></div>`;
-                }
+                html = `<div class="mb-4 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm">`+
+                       `<div class="flex items-start justify-between mb-3"><div class="flex items-center gap-2"><span class="text-2xl">💰</span><div class="text-base font-bold text-gray-900">Payment Intelligence</div></div><div class="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded font-medium">Smart Analysis</div></div>`+
+                       `<div class="grid grid-cols-2 gap-3 mb-4">`+
+                       `<div class="bg-white rounded-lg p-3 border-2 border-blue-300"><div class="text-xs text-gray-600 mb-1">Total Due</div><div class="text-2xl font-bold text-blue-600">₹${total.toLocaleString('en-IN')}</div></div>`+
+                       `<div class="bg-white rounded-lg p-3 border-2 border-gray-300"><div class="text-xs text-gray-600 mb-1">Bills Count</div><div class="text-2xl font-bold text-gray-700">${count}</div></div>`+
+                       `</div>`+
+                       `<div class="formatted-message">${formatMessage(res.message || '')}</div>`+
+                       `</div>`;
                 if(res.ai_message){
-                  html += `<div class="mt-3 p-2 bg-white border rounded text-sm text-gray-800"><strong>AI:</strong> ${res.ai_message}</div>`;
+                  html += `<div class="mt-3 p-3 bg-white border-l-4 border-purple-400 rounded text-sm text-gray-800"><strong class="text-purple-700">AI Enhancement:</strong> ${res.ai_message}</div>`;
                 }
-                html += `</div></div>`;
               }
             }
             container.innerHTML = html;
+            saveSummaryToCache();
             showToast('Summary updated');
           }catch(e){
             console.error(e);
@@ -180,11 +291,47 @@
           } finally {
             if(btn) { btn.disabled = false; btn.textContent = origText; }
           }
-        }
+      }
 
-        if(refreshBtn) refreshBtn.addEventListener('click', function(){ fetchSummary(false); });
-        if(forceBtn) forceBtn.addEventListener('click', function(){ if(!confirm('Force an AI summary? This uses your OpenAI quota.')) return; fetchSummary(true); });
-      })();
+      // Mark paid button handler
+      async function markPaid(billId){
+        try {
+          console.log('Marking bill as paid:', billId);
+          const res = await fetch(`/notifications/${billId}/mark_done`, {method: 'POST', credentials: 'same-origin'});
+          const data = await res.json();
+          console.log('Mark paid response:', data);
+          
+          if(!data.ok){
+            showToast('❌ ' + (data.error || 'Failed to mark bill as paid'));
+            return;
+          }
+          
+          // Remove the notification from DOM with fade out
+          const elem = document.getElementById(`notif-${billId}`);
+          if(elem){
+            elem.style.transition = 'all 0.3s ease';
+            elem.style.opacity = '0';
+            elem.style.transform = 'translateX(20px)';
+            setTimeout(()=>{ 
+              elem.remove();
+              // Check if no more notifications, show empty state
+              const notifContainer = document.querySelector('.space-y-3');
+              if(notifContainer && notifContainer.children.length === 0){
+                notifContainer.innerHTML = '<div class="bg-white rounded-lg shadow-sm p-6"><p class="text-sm text-gray-600">No notifications yet. We\'ll show reminders and alerts here.</p></div>';
+              }
+            }, 300);
+          }
+          showToast('✅ Bill marked as paid!');
+          // Clear cached insights/forecast since data changed
+          localStorage.removeItem('finassist_insights_cache');
+          localStorage.removeItem('finassist_forecast_cache');
+          // Refresh AI analysis after marking paid
+          setTimeout(() => fetchSummary(false), 500);
+        } catch(e) {
+          console.error('markPaid error:', e);
+          showToast('❌ Failed to mark bill as paid');
+        }
+      }
     </script>
   </body>
 </html>

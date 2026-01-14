@@ -6,11 +6,11 @@ body {
 }
 
 .sidebar {
-	width: 256px;
+	width: 288px;
 }
 
 .main-content {
-	margin-left: 256px;
+	margin-left: 288px;
 	min-height: 100vh;
 }
 
@@ -26,57 +26,6 @@ body {
 	font-weight: 700;
 	border-right: 4px solid #38A169;
 	color: white;
-}
-
-.chart-card {
-	background: #fff;
-	padding: 1rem;
-	border-radius: 8px;
-	box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
-}
-
-.chart-title {
-	font-weight: 600;
-	color: #0F172A;
-	margin-bottom: 0.5rem;
-}
-
-.timeline {
-	display: flex;
-	gap: 0.75rem;
-	overflow-x: auto;
-	padding: 0.5rem 0;
-}
-
-.timeline .item {
-	min-width: 160px;
-	background: #F8FAFC;
-	padding: 0.75rem;
-	border-radius: 8px;
-	box-shadow: 0 6px 18px rgba(2, 6, 23, 0.03);
-}
-
-.metric {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 0.5rem;
-}
-
-.metric .value {
-	font-weight: 700;
-	color: #10B981;
-}
-
-.insights {
-	background: #fff;
-	padding: 1rem;
-	border-radius: 8px;
-	box-shadow: 0 8px 24px rgba(2, 6, 23, 0.04);
-}
-
-.mini-chart {
-	height: 120px;
 }
 
 @media (max-width: 1024px) {

@@ -1,5 +1,0 @@
-.notifications-list{display:flex;flex-direction:column;gap:12px}
-.notif{padding:12px}
-.notif-title{font-weight:700;margin-bottom:6px}
-.notif-body{color:var(--muted);margin-bottom:8px}
-.notif-meta{font-size:13px;color:#9ca3af;display:flex;justify-content:space-between;align-items:center}

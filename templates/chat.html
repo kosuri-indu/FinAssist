@@ -6,63 +6,342 @@
   <title>Chat Assistant</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/overview.css') }}">
-  <!-- Markdown renderer and sanitizer for assistant replies -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
   <style>
-    /* Simple chat bubble styles */
-    html, body { height: 100%; }
-    /* Make chat window a fixed height so card doesn't fill entire viewport */
-    .chat-window { height: 60vh; overflow-y: auto; padding: 1rem; display:flex; flex-direction:column; gap:0.75rem; }
-    .bubble { max-width: 80%; padding: .6rem .8rem; border-radius: .75rem; }
-    .bubble.user { margin-left: auto; background: #1F2937; color: white; border-bottom-right-radius: .25rem; }
-    /* Assistant reply bubble: green background, black text (as requested). */
-    .bubble.ai { margin-right: auto; background: #e6ffea; color: #000; border-bottom-left-radius: .25rem; }
-    /* Allow rendered HTML inside AI bubbles to wrap nicely */
-    .bubble.ai p { margin: 0 0 0.5rem 0; color: inherit; }
-    .bubble.ai table { border-collapse: collapse; width: 100%; }
-    .bubble.ai th, .bubble.ai td { border: 1px solid #d1fae5; padding: 6px 8px; text-align: left; }
-    .bubble.ai th { background:#f0fff4; font-weight:600; }
+    html, body { height: 100%; margin: 0; padding: 0; }
+    main.main-content { margin-left: 288px; padding: 2rem; }
+    header { margin-bottom: 1rem; }
+    header h1 { font-size: 1.875rem; font-weight: 800; color: #111827; }
+    header p { font-size: 0.875rem; color: #4b5563; }
+    
+    .chat-window { 
+      height: 60vh; 
+      overflow-y: auto; 
+      padding: 1rem; 
+      display: flex; 
+      flex-direction: column; 
+      gap: 0.75rem; 
+      background: #f9fafb; 
+      border-radius: 8px; 
+    }
+    
+    .bubble { 
+      max-width: 80%; 
+      padding: 0.8rem 1rem; 
+      border-radius: 0.5rem; 
+      word-wrap: break-word;
+    }
+    
+    .bubble.user { 
+      margin-left: auto; 
+      background: #1F2937; 
+      color: white; 
+    }
+    
+    .bubble.ai { 
+      margin-right: auto; 
+      background: #e6ffea; 
+      color: #000; 
+      border: 1px solid #d1fae5; 
+    }
+    
+    .bubble.ai p { 
+      margin: 0 0 0.5rem 0; 
+      color: inherit; 
+    }
+    
+    .bubble.ai table { 
+      border-collapse: collapse; 
+      width: 100%; 
+      margin: 0.5rem 0; 
+    }
+    
+    .bubble.ai th, .bubble.ai td { 
+      border: 1px solid #d1fae5; 
+      padding: 6px 8px; 
+      text-align: left; 
+    }
+    
+    .bubble.ai th { 
+      background: #f0fff4; 
+      font-weight: 600; 
+    }
+    
+    #chat-form {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    
+    #chat-input {
+      flex: 1;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      resize: none;
+      font-family: inherit;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      min-height: 44px;
+      max-height: 120px;
+    }
+    
+    #chat-input:focus {
+      outline: none;
+      border-color: #16a34a;
+      box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+    }
+    
+    #send-btn {
+      background-color: #16a34a;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      height: 44px;
+      flex-shrink: 0;
+    }
+    
+    #send-btn:hover {
+      background-color: #15803d;
+    }
+    
+    #send-btn:disabled {
+      background-color: #9ca3af;
+      cursor: not-allowed;
+    }
+    
+    #clear-btn {
+      background-color: #dc2626;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      height: 44px;
+      flex-shrink: 0;
+    }
+    
+    #clear-btn:hover {
+      background-color: #b91c1c;
+    }
+    
+    #clear-btn:disabled {
+      background-color: #9ca3af;
+      cursor: not-allowed;
+    }
   </style>
  </head>
 <body>
     {% include 'sidebar.html' %}
 
-    <main class="main-content ml-72 p-8">
-        <header class="mb-4">
-          <h1 class="text-3xl font-extrabold text-gray-900">Assistant Chat</h1>
-          <p class="text-sm text-gray-600">Ask questions about your finances or transactions.</p>
+    <main class="main-content">
+        <header>
+          <h1>Assistant Chat</h1>
+          <p>Ask questions about your finances or transactions.</p>
         </header>
 
-        <div class="bg-white rounded-lg shadow p-4 flex flex-col">
-          <div class="flex items-center justify-between mb-3">
-            <div class="text-sm text-gray-700">Model: <strong class="text-gray-900">gpt-4o-mini</strong></div>
-            <div class="text-xs text-gray-500">Connected</div>
+        <div style="background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1rem; display: flex; flex-direction: column;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;">
+            <div style="font-size: 0.875rem; color: #374151;">Model: <strong style="color: #111827;">Llama 3.3 70B (Groq - Free)</strong></div>
+            <div style="font-size: 0.75rem; color: #9ca3af;">Connected</div>
           </div>
 
-          <div id="chat-window" class="chat-window bg-gray-50 rounded-lg">
-            <!-- messages will appear here -->
-            <div class="bubble ai">Hello there, I am here to  help you summarize your spending or transactions.</div>
+          <div id="chat-window" class="chat-window">
+            <div class="bubble ai">Hello! I'm here to help you with your finances and transactions.</div>
           </div>
 
-          <form id="chat-form" class="mt-4 flex gap-3 items-end">
-            <textarea id="chat-input" rows="1" placeholder="Type a message or add: 'Spent 200 on groceries'" class="flex-1 border rounded px-3 py-2 resize-none"></textarea>
-            <button id="send-btn" class="bg-indigo-600 text-white px-4 py-2 rounded">Send</button>
+          <form id="chat-form">
+            <textarea id="chat-input" rows="1" placeholder="Type a message..."></textarea>
+            <button id="send-btn" type="submit">Send</button>
+            <button id="clear-btn" type="button">Clear History</button>
           </form>
         </div>
-      </div>
     </main>
 
     <script>
-      const form = document.getElementById('chat-form');
-      const input = document.getElementById('chat-input');
-      const windowEl = document.getElementById('chat-window');
+      const CHAT_STORAGE_KEY = 'finassist_chat_history';
+      const CHAT_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+      
+      function loadChatHistory(){
+        try {
+          const stored = localStorage.getItem(CHAT_STORAGE_KEY);
+          if(!stored) return [];
+          
+          const history = JSON.parse(stored);
+          const now = Date.now();
+          
+          // Filter out messages older than 24 hours
+          const validMessages = history.filter(msg => {
+            const messageAge = now - msg.timestamp;
+            return messageAge < CHAT_EXPIRY_MS;
+          });
+          
+          // Save back only valid messages
+          if(validMessages.length !== history.length){
+            localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(validMessages));
+          }
+          
+          return validMessages;
+        } catch(e) {
+          console.warn('Could not load chat history:', e);
+          return [];
+        }
+      }
+      
+      function saveChatMessage(text, role){
+        try {
+          const history = loadChatHistory();
+          history.push({
+            text: text,
+            role: role,
+            timestamp: Date.now()
+          });
+          localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(history));
+        } catch(e) {
+          console.warn('Could not save chat message:', e);
+        }
+      }
+      
+      function clearExpiredMessages(){
+        try {
+          const history = loadChatHistory();
+          localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(history));
+        } catch(e) {
+          console.warn('Could not clear expired messages:', e);
+        }
+      }
+      
+      function initializeChat(){
+        console.log('Initializing chat...');
+        const form = document.getElementById('chat-form');
+        const input = document.getElementById('chat-input');
+        const windowEl = document.getElementById('chat-window');
+        const sendBtn = document.getElementById('send-btn');
+        const clearBtn = document.getElementById('clear-btn');
 
-      function appendMessage(text, who, isHtml=false){
+        if(!form || !input || !windowEl || !sendBtn || !clearBtn){
+          console.warn('Chat elements not found', {form, input, windowEl, sendBtn, clearBtn});
+          return;
+        }
+
+        console.log('Chat elements found, setting up handlers');
+
+        // Clear button handler
+        clearBtn.onclick = function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          if(confirm('Clear all chat history from device and server? This cannot be undone.')){
+            clearBtn.disabled = true;
+            
+            // Clear localStorage
+            localStorage.removeItem(CHAT_STORAGE_KEY);
+            
+            // Clear database via API
+            fetch('/api/chat/clear', { 
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: {'Content-Type':'application/json'}
+            })
+            .then(res => res.json())
+            .then(data => {
+              console.log('Chat cleared from server:', data);
+              windowEl.innerHTML = '<div class="bubble ai">Hello! I\'m here to help you with your finances and transactions.</div>';
+              clearBtn.disabled = false;
+            })
+            .catch(err => {
+              console.error('Error clearing chat:', err);
+              alert('Error clearing chat from server');
+              clearBtn.disabled = false;
+            });
+          }
+        };
+
+        // Clear window and load chat history
+        windowEl.innerHTML = '';
+        
+        // Load previous chat history
+        const chatHistory = loadChatHistory();
+        if(chatHistory.length > 0){
+          chatHistory.forEach(msg => {
+            const el = document.createElement('div');
+            el.className = 'bubble ' + (msg.role === 'user' ? 'user' : 'ai');
+            if(msg.role !== 'user'){
+              try {
+                const raw = marked.parse(msg.text || '');
+                el.innerHTML = DOMPurify.sanitize(raw);
+              } catch(e) {
+                el.textContent = msg.text;
+              }
+            } else {
+              el.textContent = msg.text;
+            }
+            windowEl.appendChild(el);
+          });
+          windowEl.scrollTop = windowEl.scrollHeight;
+        } else {
+          // Show welcome message if no history
+          const welcomeMsg = "Hello! I'm here to help you with your finances and transactions. This chat will be saved for 30 days.";
+          const welcomeEl = document.createElement('div');
+          welcomeEl.className = 'bubble ai';
+          welcomeEl.textContent = welcomeMsg;
+          windowEl.appendChild(welcomeEl);
+          // Save welcome message to localStorage
+          saveChatMessage(welcomeMsg, 'assistant');
+        }
+
+        // Clear all previous handlers
+        form.onsubmit = null;
+        sendBtn.onclick = null;
+        input.onkeydown = null;
+
+        // Set up event handlers - using simple on* attributes
+        form.onsubmit = function(e) {
+          console.log('Form submit intercepted');
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          sendMessage();
+          return false;
+        };
+        
+        sendBtn.onclick = function(e) {
+          console.log('Send button clicked');
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          sendMessage();
+          return false;
+        };
+
+        input.onkeydown = function(e) {
+          if(e.key === 'Enter' && !e.shiftKey){
+            console.log('Enter pressed');
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            sendMessage();
+            return false;
+          }
+        };
+        
+        console.log('Chat initialization complete');
+      }
+
+      function appendMessage(text, who, isHtml=false, saveToStorage=true){
+        const windowEl = document.getElementById('chat-window');
         const el = document.createElement('div');
         el.className = 'bubble ' + (who === 'user' ? 'user' : 'ai');
         if(isHtml && who !== 'user'){
-          // Render markdown -> HTML and sanitize before inserting
           try{
             const raw = marked.parse(text || '');
             el.innerHTML = DOMPurify.sanitize(raw);
@@ -74,65 +353,96 @@
         }
         windowEl.appendChild(el);
         windowEl.scrollTop = windowEl.scrollHeight;
+        
+        // Save message to history only if requested
+        if(saveToStorage){
+          saveChatMessage(text, who);
+        }
+        
         return el;
       }
 
       async function sendMessage(){
+        console.log('sendMessage called');
+        const input = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        const windowEl = document.getElementById('chat-window');
         const v = input.value.trim();
-        if(!v) return;
-        appendMessage(v, 'user');
-        input.value = '';
-
-        // quick heuristic: if message starts with "spent" or contains a number + category, send to quick-add endpoint
-        const lower = v.toLowerCase();
-        if(lower.startsWith('spent') || /\d+/.test(lower) && /(on|for)/.test(lower)){
-          // POST to quick add endpoint (non-blocking); fallback to mock response
-          try{
-            await fetch('/transactions/quick', { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({text: v}) });
-            appendMessage('Added as a quick transaction (sent to server).', 'ai');
-          }catch(err){
-            appendMessage('Unable to reach server — saved locally (mock).', 'ai');
-          }
+        
+        console.log('Message value:', v);
+        if(!v) {
+          console.log('Empty message, returning');
           return;
         }
+        
+        appendMessage(v, 'user');
+        input.value = '';
+        sendBtn.disabled = true;
 
-        // send message to server and show reply
-        const thinkingEl = appendMessage('Thinking…', 'ai', false);
+        // Don't try to parse as quick transaction - always use chat API
+        // This ensures better understanding and only read calls to the database
+
+        // Show thinking indicator but don't save it to localStorage
+        const thinkingEl = appendMessage('Thinking…', 'ai', false, false);
 
         try{
-          const res = await fetch('/api/chat', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: v}) });
+          console.log('Fetching /api/chat with message:', v);
+          const res = await fetch('/api/chat', { 
+            method: 'POST', 
+            headers: {'Content-Type':'application/json'}, 
+            body: JSON.stringify({message: v}),
+            credentials: 'same-origin'
+          });
+          
+          console.log('Response status:', res.status);
           const body = await res.json();
+          console.log('Response body:', body);
+          
           if(res.ok && body.reply){
-            // Render assistant reply as sanitized markdown inside the same bubble
             try{
               const rendered = marked.parse(body.reply || '');
               thinkingEl.innerHTML = DOMPurify.sanitize(rendered);
+              // Save the actual response to localStorage
+              saveChatMessage(body.reply, 'assistant');
             }catch(e){
+              console.error('Markdown parse error:', e);
               thinkingEl.textContent = body.reply;
+              saveChatMessage(body.reply, 'assistant');
             }
           }else if(body.error){
-            thinkingEl.textContent = 'Error: ' + body.error;
+            const errorMsg = 'Error: ' + body.error;
+            thinkingEl.textContent = errorMsg;
+            saveChatMessage(errorMsg, 'assistant');
           }else{
-            thinkingEl.textContent = 'No reply from server.';
+            const noReplyMsg = 'No reply from server.';
+            thinkingEl.textContent = noReplyMsg;
+            saveChatMessage(noReplyMsg, 'assistant');
           }
         }catch(err){
-          thinkingEl.textContent = 'Unable to reach chat server.';
+          console.error('Chat API error:', err);
+          const errorMsg = 'Unable to reach chat server: ' + err.message;
+          thinkingEl.textContent = errorMsg;
+          saveChatMessage(errorMsg, 'assistant');
         }
-        windowEl.scrollTop = windowEl.scrollHeight;
+        
+        const windowEl2 = document.getElementById('chat-window');
+        windowEl2.scrollTop = windowEl2.scrollHeight;
+        sendBtn.disabled = false;
       }
 
-      form.addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        await sendMessage();
-      });
+      // Initialize on page load
+      initializeChat();
 
-      // Send on Enter (no Shift) from the textarea
-      input.addEventListener('keydown', async (e) => {
-        if(e.key === 'Enter' && !e.shiftKey){
-          e.preventDefault();
-          await sendMessage();
-        }
-      });
+      // Hook for SPA navigation
+      if(typeof window.onPageLoad === 'undefined'){
+        window.onPageLoad = initializeChat;
+      } else {
+        const oldOnPageLoad = window.onPageLoad;
+        window.onPageLoad = function(){
+          oldOnPageLoad();
+          initializeChat();
+        };
+      }
     </script>
 </body>
 </html>

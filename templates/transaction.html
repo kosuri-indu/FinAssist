@@ -54,6 +54,7 @@
                     <!-- Filters -->
                     <div class="mb-4">
                         <div class="flex flex-col md:flex-row md:items-center md:gap-3">
+                            <input id="filterSearch" type="text" placeholder="Search description..." class="px-2 py-2 border rounded text-sm w-full md:w-48" />
                             <select id="filterType" class="px-2 py-2 border rounded text-sm w-full md:w-36">
                                 <option value="all">All Types</option>
                                 <option value="income">Income</option>
@@ -126,8 +127,8 @@
                                 const qs = (search && search.value) ? search.value.toLowerCase().trim() : '';
                                 const tp = type && type.value ? type.value : 'all';
                                 const cat = category && category.value ? category.value : 'all';
-                                const f = from && from.value ? new Date(from.value) : null;
-                                const t = to && to.value ? new Date(to.value) : null;
+                                const f = from && from.value ? new Date(from.value + 'T00:00:00') : null;
+                                const t = to && to.value ? new Date(to.value + 'T23:59:59') : null;
                                 let visible = 0;
                                 rows.forEach(r => {
                                     const desc = (r.dataset.desc || '').toLowerCase();
@@ -135,20 +136,30 @@
                                     const rtype = r.dataset.type || '';
                                     const rdate = r.dataset.date ? new Date(r.dataset.date) : null;
                                     let show = true;
+                                    
+                                    // Search filter
                                     if(qs){
                                         show = desc.indexOf(qs) !== -1 || (r.dataset.amount && r.dataset.amount.indexOf(qs) !== -1);
                                     }
+                                    
+                                    // Type filter
                                     if(show && tp !== 'all') show = (rtype === tp);
+                                    
+                                    // Category filter
                                     if(show && cat !== 'all') show = (rcat === cat);
+                                    
+                                    // Date range filter
                                     if(show && f && rdate) show = (rdate >= f);
-                                    if(show && t && rdate) show = (rdate <= new Date(t.getFullYear(), t.getMonth(), t.getDate(),23,59,59));
+                                    if(show && t && rdate) show = (rdate <= t);
+                                    
                                     r.style.display = show ? '' : 'none';
                                     if(show) visible++;
                                 });
                                 countEl.textContent = visible;
                             }
 
-                            [search,type,category,from,to].forEach(el => el && el.addEventListener('input', applyFilters));
+                            [search,type,category,from,to].forEach(el => el && el.addEventListener('change', applyFilters));
+                            [search].forEach(el => el && el.addEventListener('input', applyFilters));
                         })();
                     </script>
                 </div>

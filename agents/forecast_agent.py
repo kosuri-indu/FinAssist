@@ -10,6 +10,7 @@ from db import db
 from sqlalchemy import text
 from models import Transaction, AgentResult
 from datetime import datetime
+from .chat_agent_v2 import groq_limiter
 
 
 def gather_forecast_context(user_id: str) -> Dict[str, Any]:
@@ -71,13 +72,38 @@ def gather_forecast_context(user_id: str) -> Dict[str, Any]:
 
 
 def build_forecast_prompt(context: Dict[str, Any]) -> str:
-    system = (
-        "You are FinAssist Forecast agent. All amounts are Indian Rupees (INR). Numeric values in the context are in paise (stored as `amount_cents`). Convert to rupees for human-readable output and include rupee values and the `₹` symbol when appropriate.\n"
-        "Given monthly income/expense history, produce a JSON object with:\n"
-        "- predicted_total_expense_cents (number)\n- predicted_total_income_cents (number)\n- expected_net_cents (number)\n- predicted_total_expense_rupees (number)\n- predicted_total_income_rupees (number)\n- expected_net_rupees (number)\n- narrative (short string)\n\nReturn ONLY JSON."
-    )
-    payload = {'system': system, 'context': context}
-    return json.dumps(payload, default=str)
+    # Simpler, clearer prompt for JSON output
+    months = context.get('monthly_history', [])
+    cat_history = context.get('category_history', {})
+    
+    months_summary = json.dumps(months, default=str)
+    
+    prompt = f"""Analyze this spending history and return ONLY a valid JSON object (no extra text before or after):
+
+Monthly History (last 6 months): {months_summary}
+
+Return this JSON structure exactly:
+{{
+  "predicted_expense_rupees": number,
+  "predicted_income_rupees": number,
+  "expected_net_rupees": number,
+  "confidence": "HIGH or MEDIUM or LOW",
+  "forecast_explanation": "2-3 sentences explaining the forecast",
+  "category_predictions": [
+    {{"category": "name", "predicted_rupees": number, "trend": "UP or DOWN or STABLE"}}
+  ],
+  "biggest_risk": "what could go wrong",
+  "savings_opportunity": "specific way to save money with ₹ amount",
+  "monthly_summary": {{
+    "avg_last_3_months_expense_rupees": number,
+    "trend_direction": "INCREASING or STABLE or DECREASING",
+    "total_months_analyzed": number
+  }}
+}}
+
+IMPORTANT: Return ONLY the JSON object. No markdown, no explanation, no code blocks. Just valid JSON."""
+    
+    return prompt
 
 
 def _compute_forecast_signature(context: Dict[str, Any]) -> str:
@@ -85,120 +111,71 @@ def _compute_forecast_signature(context: Dict[str, Any]) -> str:
     return hashlib.sha256(s.encode('utf-8')).hexdigest()
 
 
-def run_forecast_agent_for_user(user_id: str, force_ai: bool = False) -> Dict[str, Any]:
+def run_forecast_agent_for_user(user_id: str, force_ai: bool = True) -> Dict[str, Any]:
+    """Return AI-powered financial forecast for next month.
+    
+    Always calls AI to provide detailed spending predictions and insights.
+    """
     load_dotenv()
-    api_key = os.environ.get('OPENAI_API_KEY')
-    model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+    api_key = os.environ.get('GROQ_API_KEY')
+    model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
 
     context = gather_forecast_context(user_id)
-    # simple heuristic: average last 3 months if data available
-    months = context.get('monthly_history', [])
-    if months and len(months) >= 1:
-        take = months[:3]
-        avg_exp = sum(m['expense_cents'] for m in take) // len(take)
-        avg_inc = sum(m['income_cents'] for m in take) // len(take)
-        heuristic = {
-            'predicted_total_expense_cents': int(avg_exp),
-            'predicted_total_income_cents': int(avg_inc),
-            'expected_net_cents': int(avg_inc - avg_exp),
-            'narrative': 'Heuristic forecast based on average of recent months.'
-        }
-    else:
-        heuristic = {'error': 'not enough history', 'predicted_total_expense_cents': 0, 'predicted_total_income_cents': 0, 'expected_net_cents': 0}
-
-    # compute category shifts if category_history present
-    cat_shifts = []
+    
+    # Always generate fresh forecast via AI
+    if not api_key:
+        return {'error': 'GROQ_API_KEY not configured', 'message': 'AI forecast unavailable'}
+    
+    # Check rate limits
+    can_proceed, limit_msg = groq_limiter.check_limits()
+    if not can_proceed:
+        return {'error': limit_msg, 'message': 'Rate limit reached'}
+    
+    groq_limiter.record_request()    
+    # Call AI for comprehensive forecast
     try:
-        ch = context.get('category_history', {})
-        # expect keys like 'YYYY-MM'
-        keys = sorted([k for k in ch.keys()], reverse=True)
-        if keys and len(keys) >= 2:
-            last = ch.get(keys[0], {})
-            prev = ch.get(keys[1], {})
-            # collect all categories
-            cats = set(list(last.keys()) + list(prev.keys()))
-            shifts = []
-            for c in cats:
-                last_amt = last.get(c, 0)
-                prev_amt = prev.get(c, 0)
-                if prev_amt > 0:
-                    pct = round(((last_amt - prev_amt) / prev_amt) * 100, 1)
-                elif last_amt > 0:
-                    pct = None
-                else:
-                    pct = 0.0
-                shifts.append({'category': c, 'prev_cents': int(prev_amt), 'last_cents': int(last_amt), 'change_pct': pct})
-            # top increases and decreases
-            incs = sorted([s for s in shifts if s.get('change_pct') is not None], key=lambda x: x['change_pct'], reverse=True)[:5]
-            decs = sorted([s for s in shifts if s.get('change_pct') is not None], key=lambda x: x['change_pct'])[:5]
-            cat_shifts = {'month': keys[0], 'prev_month': keys[1], 'increases': incs, 'decreases': decs}
-    except Exception:
-        cat_shifts = []
-
-    heuristic['category_shifts'] = cat_shifts
-
-    # Ask model for a short JSON forecast too (but fallback to heuristic)
-    # caching by signature to avoid repeated AI calls
-    sig = _compute_forecast_signature(context)
-    try:
-        ttl_hours = int(os.environ.get('FORECAST_AGENT_CACHE_TTL_HOURS', '24'))
-    except Exception:
-        ttl_hours = 24
-
-    try:
-        existing = AgentResult.query.filter_by(user_id=user_id, agent_name='forecast_agent_v1', input_text=sig).order_by(AgentResult.created_at.desc()).first()
-    except Exception:
-        existing = None
-
-    from datetime import datetime
-    now = datetime.utcnow()
-    if existing and existing.created_at:
-        age_hours = (now - existing.created_at).total_seconds() / 3600.0
-        if age_hours <= ttl_hours and not force_ai:
-            return existing.result_json or heuristic
-
-    # persist heuristic result (as default cached value)
-    try:
-        ar = AgentResult(user_id=user_id, agent_name='forecast_agent_v1', input_text=sig, result_json=heuristic)
-        db.session.add(ar)
-        db.session.commit()
-    except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-
-    # If forcing AI and we have a key, call model; otherwise return heuristic
-    if force_ai:
-        if not api_key:
-            heuristic['note'] = 'OPENAI_API_KEY not set; returning heuristic forecast.'
-            return heuristic
-
         prompt = build_forecast_prompt(context)
+        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+        response = client.chat.completions.create(model=model, messages=[{'role':'user','content': prompt}], max_tokens=2000, temperature=0.0)
+        assistant = response.choices[0].message.content
+        
+        # Try to extract JSON from response (may have extra text, markdown blocks, etc)
         try:
-            client = OpenAI(api_key=api_key)
-            response = client.chat.completions.create(model=model, messages=[{'role':'system','content':prompt}], max_tokens=400, temperature=0.0)
-            assistant = response.choices[0].message.content
-            try:
-                parsed = json.loads(assistant)
-            except Exception:
-                parsed = heuristic
-
-            try:
-                # ensure category_shifts included in AI result where possible
-                if isinstance(parsed, dict) and 'category_shifts' not in parsed:
-                    parsed['category_shifts'] = heuristic.get('category_shifts')
-                ar2 = AgentResult(user_id=user_id, agent_name='forecast_agent_v1', input_text=sig, result_json=parsed)
-                db.session.add(ar2)
-                db.session.commit()
-            except Exception:
+            ai_forecast = json.loads(assistant)
+        except json.JSONDecodeError:
+            # Remove markdown code blocks if present
+            cleaned = assistant
+            if '```json' in cleaned:
+                start = cleaned.find('{', cleaned.find('```json'))
+                end = cleaned.rfind('}')
+            elif '```' in cleaned:
+                start = cleaned.find('{', cleaned.find('```'))
+                end = cleaned.rfind('}')
+            else:
+                start = cleaned.find('{')
+                end = cleaned.rfind('}')
+            
+            if start != -1 and end != -1:
                 try:
-                    db.session.rollback()
-                except Exception:
-                    pass
+                    ai_forecast = json.loads(cleaned[start:end+1])
+                except json.JSONDecodeError:
+                    # Return raw response with error
+                    ai_forecast = {'error': 'JSON parsing failed', 'raw_response': assistant[:300]}
+            else:
+                ai_forecast = {'error': 'No JSON found in response', 'raw_response': assistant[:300]}
 
-            return parsed
+        # persist AI result
+        try:
+            sig = _compute_forecast_signature(context)
+            ar = AgentResult(user_id=user_id, agent_name='forecast_agent_v1', input_text=sig, result_json=ai_forecast)
+            db.session.add(ar)
+            db.session.commit()
         except Exception:
-            return heuristic
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
 
-    return heuristic
+        return ai_forecast
+    except Exception as e:
+        return {'error': f'AI forecast failed: {str(e)}', 'message': 'Could not generate forecast'}

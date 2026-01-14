@@ -120,3 +120,25 @@ class ChatLog(db.Model):
     def to_dict(self):
         return {'id': self.id, 'user_id': self.user_id, 'role': self.role, 'content': self.content, 'meta': self.meta, 'created_at': self.created_at.isoformat()}
 
+
+class ChatCache(db.Model):
+    __tablename__ = 'chat_cache'
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
+    question_text = Column(Text, nullable=False)
+    answer_text = Column(Text, nullable=False)
+    similarity_score = Column(Integer, nullable=False, default=100)  # 0-100
+    hit_count = Column(Integer, nullable=False, default=1)
+    cached_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'question': self.question_text[:100],
+            'hit_count': self.hit_count,
+            'cached_at': self.cached_at.isoformat()
+        }
+

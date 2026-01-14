@@ -123,25 +123,6 @@
             e.preventDefault();
             toggleView(true); 
         });
-        const showMessage = (text, type = 'success') => {
-            const messageBox = document.getElementById('messageBox');
-            const color = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
-            const messageEl = document.createElement('div');
-            messageEl.className = `${color} text-white px-4 py-3 rounded-lg shadow-xl mb-2 flex items-center justify-between transition-opacity duration-300`;
-            messageEl.style.opacity = '0';
-            messageEl.innerHTML = `
-                <p class="text-sm font-medium">${text}</p>
-                <button class="ml-4 text-white hover:text-gray-200" onclick="this.parentNode.remove()">
-                    &times;
-                </button>
-            `;
-            messageBox.prepend(messageEl);
-            setTimeout(() => { messageEl.style.opacity = '1'; }, 10);
-            setTimeout(() => {
-                messageEl.style.opacity = '0';
-                setTimeout(() => messageEl.remove(), 300);
-            }, 5000);
-        };
         window.togglePasswordVisibility = (id) => {
             const input = document.getElementById(id);
             input.type = input.type === 'password' ? 'text' : 'password';

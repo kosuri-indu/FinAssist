@@ -4,14 +4,14 @@ from dotenv import load_dotenv
 from db import init_db, db
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import User, Bill, Category, Transaction, ChatLog, AgentResult
-from datetime import datetime
+from datetime import datetime, timedelta
 import csv
 import io
 import json
 from sqlalchemy import inspect, text, create_engine
 from sqlalchemy.exc import OperationalError
 from threading import Thread
-from agents.chat_agent import run_chat_agent
+from agents.chat_agent_v2 import run_chat_agent_v2, groq_limiter
 from agents.insights_agent import run_insights_agent_for_user
 from agents.forecast_agent import run_forecast_agent_for_user
 from agents.reminder_agent import get_upcoming_reminders, mark_bill_paid, run_reminder_agent_for_user
@@ -56,13 +56,6 @@ load_dotenv()
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret')
 
-
-@app.route('/api/dashboard/trigger-refresh', methods=['POST'])
-def api_dashboard_trigger_refresh():
-    user = get_current_user()
-    if not user:
-        return (jsonify({'error': 'authentication required'}), 401)
-    return (jsonify({'status': 'accepted'}), 202)
 
 def get_current_user():
     """Return the logged-in User or None.
@@ -155,43 +148,122 @@ def _debug_whoami():
 
 @app.route('/chat')
 def chat():
-    # simple chat page (no DB integration required for now)
+    # Use chat template
     return render_template('chat.html')
 
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
-    """Minimal chat endpoint: accepts JSON {message: '...'} and returns {'reply': '...'}.
-    This endpoint is intentionally read-only and does not write to the database.
+    """Enhanced chat endpoint with semantic caching and rate limiting.
+    Returns: {success, reply, cached, source, similarity, error}
     """
     user = get_current_user()
     if not user:
-        return jsonify({'error': 'authentication required'}), 401
+        return jsonify({'error': 'authentication required', 'success': False}), 401
 
     data = request.get_json(silent=True) or {}
     message = data.get('message') if isinstance(data, dict) else None
     if not message:
-        return jsonify({'error': 'no message provided'}), 400
+        return jsonify({'error': 'no message provided', 'success': False}), 400
+
+    # Check rate limits before processing
+    can_proceed, limit_msg = groq_limiter.check_limits()
+    if not can_proceed:
+        return jsonify({
+            'error': f'Rate limit: {limit_msg}',
+            'success': False
+        }), 429
 
     try:
+        # Save user message
         ul = ChatLog(user_id=user.id, role='user', content=message)
         db.session.add(ul)
         db.session.commit()
-    except Exception:
+    except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Failed to save user message: {e}")
 
-    # Call DB-backed chat agent
-    reply = run_chat_agent(user.id, message)
-
-    # Save assistant reply
     try:
+        # Call enhanced chat agent with caching
+        result = run_chat_agent_v2(user.id, message)
+        
+        # Extract response details
+        reply = result.get('reply', 'No response generated')
+        is_cached = result.get('cached', False)
+        similarity = result.get('similarity', '')
+        
+        # Save assistant message
         al = ChatLog(user_id=user.id, role='assistant', content=reply)
         db.session.add(al)
         db.session.commit()
-    except Exception:
+        
+        return jsonify({
+            'success': True,
+            'reply': reply,
+            'cached': is_cached,
+            'source': result.get('source', 'api'),
+            'similarity': similarity
+        })
+        
+    except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Chat agent error: {e}")
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
 
-    return jsonify({'reply': reply})
+
+@app.route('/api/chat/history')
+def chat_history():
+    """Fetch user's chat history (last 24 hours visible in UI, 7 days in cache)."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    
+    try:
+        # Get messages from last 24 hours for display
+        from datetime import datetime, timedelta
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+        
+        messages = ChatLog.query.filter(
+            ChatLog.user_id == user.id,
+            ChatLog.created_at >= cutoff
+        ).order_by(ChatLog.created_at.asc()).all()
+        
+        return jsonify({
+            'success': True,
+            'messages': [
+                {
+                    'role': m.role,
+                    'content': m.content,
+                    'timestamp': m.created_at.isoformat() if m.created_at else None
+                }
+                for m in messages
+            ]
+        })
+    except Exception as e:
+        app.logger.error(f"Failed to fetch chat history: {e}")
+        return jsonify({'error': str(e), 'success': False}), 500
+
+
+@app.route('/api/chat/clear', methods=['POST'])
+def clear_chat_history():
+    """Clear all chat history for the current user from database."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    
+    try:
+        # Delete all ChatLog records for this user
+        ChatLog.query.filter_by(user_id=user.id).delete()
+        db.session.commit()
+        app.logger.info(f"Cleared chat history for user {user.id}")
+        return jsonify({'success': True, 'message': 'Chat history cleared'}), 200
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Failed to clear chat history: {e}")
+        return jsonify({'error': str(e), 'success': False}), 500
 
 
 # Chat agent endpoints removed — agents disabled in this workspace
@@ -312,46 +384,29 @@ def notifications_page():
             created_str = created
 
         notifs.append({'id': n.get('id'), 'title': n.get('title'), 'body': body, 'created_at': created_str, 'type': 'reminder'})
-    # fetch latest agent result (if any) to display AI summary
+    
+    # Run reminder agent to get fresh AI summary
+    agent_summary = None
     try:
-        ar = AgentResult.query.filter_by(user_id=user.id, agent_name='reminder_agent_v1').order_by(AgentResult.created_at.desc()).first()
-        agent_summary = None
-        if ar and ar.result_json:
-            try:
-                agent_summary = ar.result_json.get('message') if isinstance(ar.result_json, dict) else None
-            except Exception:
-                agent_summary = None
-    except Exception:
+        result = run_reminder_agent_for_user(user.id, force_ai=False)
+        if result and isinstance(result, dict):
+            agent_summary = result
+        else:
+            agent_summary = None
+    except Exception as e:
+        print(f"Error running reminder agent: {e}")
         agent_summary = None
 
     return render_template('notifications.html', notifications=notifs, agent_summary=agent_summary)
 
 
-@app.route('/notifications/<int:bill_id>/mark_done', methods=['POST'])
+@app.route('/notifications/<bill_id>/mark_done', methods=['POST'])
 def notifications_mark_done(bill_id):
     user = get_current_user()
     if not user:
-        return redirect(url_for('index'))
+        return jsonify({'ok': False, 'error': 'authentication required'}), 401
     res = mark_bill_paid(user.id, bill_id)
-    if res.get('ok'):
-        flash('Marked bill as paid. Next due: ' + (res.get('next_due') or 'none'), 'success')
-    else:
-        flash('Failed to mark bill: ' + (res.get('error') or 'unknown'), 'error')
-    return redirect(url_for('notifications_page'))
-
-
-@app.route('/notifications/<int:note_id>/mark_read', methods=['POST'])
-def notifications_mark_read(note_id):
-    # lightweight placeholder: no persistent notification model
-    flash('Marked as read.', 'success')
-    return redirect(url_for('notifications_page'))
-
-
-@app.route('/notifications/<int:note_id>/dismiss', methods=['POST'])
-def notifications_dismiss(note_id):
-    # placeholder: dismiss is not persisted (no notifications model)
-    flash('Dismissed.', 'info')
-    return redirect(url_for('notifications_page'))
+    return jsonify(res)
 
 
 @app.route('/api/transactions/recent')
@@ -387,23 +442,42 @@ def api_transactions_recent():
         return jsonify({'error': 'database error', 'details': str(e)}), 500
 
 
+@app.route('/api/reminders')
+def api_reminders():
+    """Return upcoming bills with AI summary and details for dashboard display."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    try:
+        # Get reminder data with optional AI enhancement
+        force_ai = request.args.get('force_ai', 'false').lower() == 'true'
+        result = run_reminder_agent_for_user(user.id, force_ai=force_ai)
+        return jsonify(result)
+    except OperationalError as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'error': 'database error', 'details': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': 'failed to fetch reminders', 'details': str(e)}), 500
+
+
+@app.route('/api/agents/insights/run', methods=['POST'])
 @app.route('/api/agents/insights/run', methods=['POST'])
 def api_agents_insights_run():
     user = get_current_user()
     if not user:
         return jsonify({'error': 'authentication required'}), 401
-    data = request.get_json(silent=True) or {}
-    force = bool(data.get('force_ai') or data.get('force'))
     try:
-        res = run_insights_agent_for_user(user.id, force_ai=force)
+        res = run_insights_agent_for_user(user.id, force_ai=True)
         return jsonify({'result': res})
     except Exception as e:
         try:
-            # attempt to rollback DB session if needed
             db.session.rollback()
         except Exception:
             pass
-        return jsonify({'error': f'Insigts agent run failed: {e}'}), 500
+        return jsonify({'error': f'Insights agent run failed: {e}'}), 500
 
 
 @app.route('/api/agents/reminders/run', methods=['POST'])
@@ -440,10 +514,8 @@ def api_agents_forecast_run():
     user = get_current_user()
     if not user:
         return jsonify({'error': 'authentication required'}), 401
-    data = request.get_json(silent=True) or {}
-    force = bool(data.get('force_ai') or data.get('force'))
     try:
-        res = run_forecast_agent_for_user(user.id, force_ai=force)
+        res = run_forecast_agent_for_user(user.id, force_ai=True)
         return jsonify({'result': res})
     except Exception as e:
         try:
@@ -470,11 +542,13 @@ def api_dashboard_summary():
     {
       monthly: { income: int, expense: int, net: int },
       upcoming_bills: [ {id,name,next_due,amount_cents} ... ],
-      utilization: { essentials_pct, discretionary_pct }
+      utilization: { essentials_pct, discretionary_pct },
+      trend: { points: [daily_expenses...] }
     }
     """
     user = get_current_user()
     if not user:
+        print("API: No user found")
         return jsonify({'error': 'authentication required'}), 401
     try:
         now = datetime.utcnow()
@@ -487,6 +561,8 @@ def api_dashboard_summary():
         expenses_cents = int(expenses_cents)
         incomes = round(incomes_cents / 100.0, 2)
         expenses = round(expenses_cents / 100.0, 2)
+        
+        print(f"API: User {user.id} - Incomes: ₹{incomes}, Expenses: ₹{expenses}")
 
         # upcoming bills in this month or next 7 days
         upcoming = []
@@ -505,15 +581,42 @@ def api_dashboard_summary():
 
         # simple utilization mock: essentials = 60% of expenses, discretionary 40% (placeholder)
         util = {'essentials_pct': 60, 'discretionary_pct': 40}
+        
+        # Calculate spending trend: last 7 days of daily expenses
+        trend_points = []
+        for day_offset in range(6, -1, -1):  # 6 days ago to today
+            day_start = (now - timedelta(days=day_offset)).replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = (now - timedelta(days=day_offset)).replace(hour=23, minute=59, second=59, microsecond=999999)
+            day_expense = db.session.query(db.func.coalesce(db.func.sum(Transaction.amount_cents), 0)).filter(
+                Transaction.user_id == user.id,
+                Transaction.txn_type == 'expense',
+                Transaction.occurred_at >= day_start,
+                Transaction.occurred_at <= day_end
+            ).scalar() or 0
+            daily_rupees = round(int(day_expense) / 100.0, 2)
+            trend_points.append(max(daily_rupees, 0))  # Ensure non-negative
 
         # return rupee values for easier display in the frontend
-        return jsonify({'monthly': {'income': incomes, 'expense': expenses, 'net': round((incomes - expenses),2)}, 'upcoming_bills': upcoming, 'utilization': util})
+        response = {
+            'monthly': {'income': incomes, 'expense': expenses, 'net': round((incomes - expenses),2)},
+            'upcoming_bills': upcoming,
+            'utilization': util,
+            'trend': {'points': trend_points}
+        }
+        print(f"API: Returning response: {response}")
+        return jsonify(response)
     except OperationalError as e:
+        print(f"API: OperationalError - {e}")
         try:
             db.session.rollback()
         except Exception:
             pass
         return jsonify({'error': 'database error', 'details': str(e)}), 500
+    except Exception as e:
+        print(f"API: Unexpected error - {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'server error', 'details': str(e)}), 500
 
 
 @app.route('/api/notifications/json')
@@ -551,49 +654,6 @@ def api_notifications_json():
         except Exception:
             pass
         return jsonify({'error': 'database error', 'details': str(e)}), 500
-
-
-@app.route('/transactions/<txn_id>/edit', methods=['POST'])
-def edit_transaction(txn_id):
-    user = get_current_user()
-    if not user:
-        return redirect(url_for('index'))
-    txn = Transaction.query.filter_by(id=txn_id, user_id=user.id).first()
-    if not txn:
-        flash('Transaction not found.', 'error')
-        return redirect(url_for('transactions_page'))
-    amount = request.form.get('amount')
-    try:
-        amount_cents = int(float(amount) * 100)
-    except Exception:
-        amount_cents = txn.amount_cents
-    occurred_at = request.form.get('occurred_at')
-    if occurred_at:
-        try:
-            txn.occurred_at = datetime.fromisoformat(occurred_at)
-        except Exception:
-            pass
-    description = request.form.get('description')
-    if description is not None:
-        txn.description = description
-    category_name = request.form.get('category')
-    if category_name:
-        cat = get_or_create_category(user, category_name)
-        txn.category_id = cat.id if cat else None
-    txn.amount_cents = amount_cents
-    txn.txn_type = request.form.get('txn_type') or txn.txn_type
-    # meta fields (payment_mode/source)
-    meta = txn.meta or {}
-    payment_mode = request.form.get('payment_mode')
-    if payment_mode:
-        meta['payment_mode'] = payment_mode
-    source = request.form.get('source')
-    if source:
-        meta['source'] = source
-    txn.meta = meta
-    db.session.commit()
-    flash('Transaction updated.', 'success')
-    return redirect(url_for('transactions_page'))
 
 
 @app.route('/transactions/<txn_id>/delete', methods=['POST'])
@@ -701,35 +761,83 @@ def transaction_quick():
     if not text:
         flash('Enter quick text.', 'error')
         return redirect(url_for('add_data'))
-    # simple amount parse
+    
+    # Enhanced parsing: handle multiple amounts and detect income vs expense
     import re
-    m = re.search(r"(\d+(?:\.\d{1,2})?)", text)
-    amount_cents = 0
-    if m:
+    
+    # Detect transaction type from keywords
+    text_lower = text.lower()
+    is_income = any(word in text_lower for word in ['received', 'earned', 'salary', 'income', 'got', 'paid to me', 'refund', 'bonus', 'gift'])
+    is_expense = any(word in text_lower for word in ['paid', 'spent', 'cost', 'expense', 'bought', 'charged', 'deducted'])
+    
+    # Extract ALL amounts (handle both with and without commas)
+    amounts = re.findall(r'(\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{2})?', text)
+    
+    if not amounts:
+        flash('No amount found in text. Please include a number.', 'error')
+        return redirect(url_for('add_data'))
+    
+    # Convert amounts by removing commas
+    parsed_amounts = []
+    for amt_str in amounts:
         try:
-            amount_cents = int(float(m.group(1)) * 100)
+            # Remove commas and convert to float, then to cents
+            amt_float = float(amt_str.replace(',', ''))
+            amt_cents = int(amt_float * 100)
+            parsed_amounts.append(amt_cents)
         except Exception:
-            amount_cents = 0
-    # try match category from user's categories
-    category = None
+            continue
+    
+    if not parsed_amounts:
+        flash('Could not parse amounts.', 'error')
+        return redirect(url_for('add_data'))
+    
+    # Determine transaction type
+    if is_income and not is_expense:
+        txn_type = 'income'
+    elif is_expense and not is_income:
+        txn_type = 'expense'
+    else:
+        # Default to expense if ambiguous
+        txn_type = 'expense'
+    
+    # Process each amount found
+    for amount_cents in parsed_amounts:
+        try:
+            category = None
+            try:
+                candidates = Category.query.filter((Category.user_id == user.id) | (Category.user_id == None)).all()
+                lt = text.lower()
+                for c in candidates:
+                    if c.name and c.name.lower() in lt:
+                        category = c
+                        break
+            except Exception:
+                category = None
+            
+            txn = Transaction(
+                user_id=user.id, 
+                txn_type=txn_type, 
+                amount_cents=amount_cents, 
+                occurred_at=datetime.utcnow(), 
+                description=text, 
+                currency='INR', 
+                category_id=(category.id if category else None), 
+                meta={'source': 'quick_add', 'parsed_from': 'multi_amount'}
+            )
+            db.session.add(txn)
+        except Exception as e:
+            continue
+    
     try:
-        candidates = Category.query.filter((Category.user_id == user.id) | (Category.user_id == None)).all()
-        lt = text.lower()
-        for c in candidates:
-            if c.name and c.name.lower() in lt:
-                category = c
-                break
-    except Exception:
-        category = None
-    txn_type = 'expense' if amount_cents > 0 else 'expense'
-    txn = Transaction(user_id=user.id, txn_type=txn_type, amount_cents=amount_cents, occurred_at=datetime.utcnow(), description=text, currency='INR', category_id=(category.id if category else None), meta={'source': 'quick_add'})
-    try:
-        db.session.add(txn)
         db.session.commit()
-        flash('Quick transaction added.', 'success')
+        if len(parsed_amounts) == 1:
+            flash(f'Transaction added (₹{parsed_amounts[0]/100:.2f}).', 'success')
+        else:
+            flash(f'Added {len(parsed_amounts)} transactions from text.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash('Error adding quick transaction: ' + str(e), 'error')
+        flash('Error adding transactions: ' + str(e), 'error')
     return redirect(url_for('add_data'))
 
 
@@ -981,14 +1089,6 @@ def notifications():
     if not user:
         return redirect(url_for('index'))
     return render_template('notifications.html')
-
-@app.route('/api/dashboard/data')
-def api_dashboard_data():
-    # Dashboard data endpoint removed — agents and cached visualizations are disabled.
-    user = get_current_user()
-    if not user:
-        return (jsonify({'error': 'authentication required'}), 401)
-    return jsonify({'charts': None, 'narration': None})
 
 if __name__ == '__main__':
 

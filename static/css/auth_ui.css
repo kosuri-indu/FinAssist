@@ -16,6 +16,8 @@ body {
     border: 1px solid #E6E9EE;
     border-radius: 6px;
     padding: 0.5rem 0.75rem;
+    color: #000;
+    background-color: #fff;
     transition: border-color 120ms ease-in-out, box-shadow 120ms ease-in-out;
 }
 
@@ -39,47 +41,6 @@ body {
     background-color: #059669;
 }
 
-.btn-ghost {
-    background: transparent;
-    color: #0f172a;
-}
-
 .hidden {
     display: none !important;
-}
-
-.center-vert {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.brand-logo {
-    color: #16A34A;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-}
-
-.small-muted {
-    color: #6B7280;
-    font-size: 0.9rem;
-}
-
-.card-heading {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: #0f172a;
-}
-
-.form-row {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-}
-
-.notice {
-    padding: 0.5rem 0.75rem;
-    background: #F1F5F9;
-    border-radius: 6px;
-    color: #0F172A;
 }

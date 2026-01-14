@@ -6,11 +6,11 @@ body {
 }
 
 .sidebar {
-	width: 256px;
+	width: 288px;
 }
 
 .main-content {
-	margin-left: 256px;
+	margin-left: 288px;
 	min-height: 100vh;
 }
 
@@ -28,39 +28,9 @@ body {
 	color: white;
 }
 
-.bill-list {
-	display: flex;
-	flex-direction: column;
-	gap: 0.5rem;
-}
-
-.bill-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 0.75rem;
-	border-radius: 8px;
-	background: #ffffff;
-	box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
-}
-
-.bill-meta {
-	display: flex;
-	gap: 0.75rem;
-	align-items: center;
-}
-
 .bill-name {
 	font-weight: 600;
 	color: #0F172A;
-}
-
-.bill-tag {
-	font-size: 0.85rem;
-	color: #475569;
-	background: #F1F5F9;
-	padding: 0.25rem 0.5rem;
-	border-radius: 6px;
 }
 
 .bill-amount {
@@ -68,40 +38,9 @@ body {
 	color: #16A34A;
 }
 
-.bill-actions {
-	display: flex;
-	gap: 0.5rem;
-}
-
-.bill-actions .btn {
-	padding: 0.35rem 0.6rem;
-	border-radius: 6px;
-}
-
-.bill-form {
-	background: #fff;
-	padding: 1rem;
-	border-radius: 8px;
-	box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
-}
-
 .small-muted {
 	color: #6B7280;
 	font-size: 0.9rem;
-}
-
-.empty-state {
-	text-align: center;
-	padding: 2rem;
-	color: #6B7280;
-}
-
-.due-soon {
-	border-left: 4px solid #F59E0B;
-}
-
-.overdue {
-	border-left: 4px solid #EF4444;
 }
 
 @media (max-width: 768px) {
