@@ -163,13 +163,14 @@
         <div class="mt-3 overflow-auto max-h-96 text-sm text-gray-700 space-y-2">
           <div>
             <div class="font-semibold">Purpose</div>
-            <div>Provides portfolio summaries, risk assessments and action plans powered by Gemini and financial data.
+            <div>Provides portfolio summaries, risk assessments and action plans powered by AI and real-time financial
+              data.
             </div>
           </div>
           <div>
             <div class="font-semibold">What It Does</div>
-            <div class="mt-1">Summarizes holdings, fetches price history, and uses the investment agent to generate
-              advice.</div>
+            <div class="mt-1">Summarizes holdings, fetches price history, and uses AI to generate personalized advice.
+            </div>
           </div>
           <div>
             <div class="font-semibold">Where It Is Used</div>
@@ -178,8 +179,9 @@
         </div>
         <div class="mt-3 flex items-center justify-between">
           <div class="text-xs text-gray-500">Last Run: {{ last_runs.invest or 'never' }}</div>
-          <button class="px-3 py-1 bg-teal-600 text-white rounded text-sm"
-            onclick="window.location.href='/invest'">Open</button>
+          <!-- Changed to use nav-link class for consistent SPA navigation -->
+          <a href="/invest"
+            class="px-3 py-1 bg-teal-600 text-white rounded text-sm hover:bg-teal-700 transition-colors">Open</a>
         </div>
       </div>
     </section>
