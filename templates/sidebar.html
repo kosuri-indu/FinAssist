@@ -93,8 +93,8 @@
 </aside>
 
 <script>
-    // Sidebar navigation: perform full page refresh when clicking nav links
-    (function(){
+    // SPA-like sidebar navigation: intercept nav-link clicks and load main content via fetch
+    (function () {
         const navLinks = Array.from(document.querySelectorAll('.nav-link'));
 
         function normalizePath(href) {
@@ -111,6 +111,41 @@
             if (link) { link.classList.add('bg-green-600', 'text-white'); link.classList.remove('hover:bg-gray-700'); }
         }
 
+        async function loadHref(href, push = true) {
+            try {
+                const res = await fetch(href, { credentials: 'same-origin' });
+                const text = await res.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const newMain = doc.querySelector(mainSelector);
+                const curMain = document.querySelector(mainSelector);
+                if (newMain && curMain) {
+                    curMain.innerHTML = newMain.innerHTML;
+                    // update the document title if provided
+                    const newTitle = doc.querySelector('title');
+                    if (newTitle) document.title = newTitle.textContent;
+                    if (push) history.pushState({ path: href }, '', href);
+                    // set active link for the loaded href
+                    const targetPath = normalizePath(href);
+                    const matched = navLinks.find(l => normalizePath(l.getAttribute('href') || l.href) === targetPath);
+                    setActive(matched || null);
+                    // run optional page init hook
+                    if (typeof window.onPageLoad === 'function') {
+                        try { window.onPageLoad(); } catch (e) { console.warn('onPageLoad error', e); }
+                    }
+                    return true;
+                } else {
+                    // fallback to full navigation when fragment not found
+                    window.location.href = href;
+                    return false;
+                }
+            } catch (e) {
+                console.error('Navigation failed, falling back to full load', e);
+                window.location.href = href;
+                return false;
+            }
+        }
+
         navLinks.forEach(link => {
             // don't intercept logout or links opting out
             const href = link.getAttribute('href');
@@ -119,8 +154,18 @@
             link.addEventListener('click', (ev) => {
                 ev.preventDefault();
                 setActive(link);
-                // Full page refresh - navigate directly
-                window.location.href = href;
+                loadHref(href, true);
+            });
+        });
+
+        // handle back/forward
+        window.addEventListener('popstate', (ev) => {
+            const path = window.location.pathname + window.location.search;
+            loadHref(path, false).then(() => {
+                // update active link on pop
+                const pathNow = normalizePath(window.location.pathname);
+                const match = navLinks.find(l => normalizePath(l.getAttribute('href') || l.href) === pathNow);
+                setActive(match || null);
             });
         });
 
