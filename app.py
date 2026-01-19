@@ -15,6 +15,10 @@ from agents.chat_agent_v2 import run_chat_agent_v2, groq_limiter
 from agents.insights_agent import run_insights_agent_for_user
 from agents.forecast_agent import run_forecast_agent_for_user
 from agents.reminder_agent import get_upcoming_reminders, mark_bill_paid, run_reminder_agent_for_user
+from agents.web_agent import fetch_url_text, post_action
+from agents.advisor import build_advice
+# from agents.investment_agent import investment_advice
+# from agents.langchain_tools import build_investment_agent_llm
 
 def _compute_next_due_from(start_date, period, interval_count=1):
     if not start_date:
@@ -152,6 +156,14 @@ def chat():
     return render_template('chat.html')
 
 
+@app.route('/invest')
+def invest_page():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('index'))
+    return render_template('invest.html')
+
+
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
     """Enhanced chat endpoint with semantic caching and rate limiting.
@@ -266,7 +278,75 @@ def clear_chat_history():
         return jsonify({'error': str(e), 'success': False}), 500
 
 
-# Chat agent endpoints removed — agents disabled in this workspace
+@app.route('/api/web/fetch', methods=['POST'])
+def api_web_fetch():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    data = request.get_json(silent=True) or {}
+    url = data.get('url')
+    if not url:
+        return jsonify({'error': 'no url provided'}), 400
+    try:
+        res = fetch_url_text(url)
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/web/post', methods=['POST'])
+def api_web_post():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'authentication required'}), 401
+    data = request.get_json(silent=True) or {}
+    url = data.get('url')
+    payload = data.get('payload') or {}
+    if not url:
+        return jsonify({'error': 'no url provided'}), 400
+    try:
+        res = post_action(url, payload)
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Replace your current /api/invest route with this:
+
+@app.route('/api/invest', methods=['POST'])
+def invest():
+    """Investment advice endpoint with single input processing."""
+    
+    # Get user input
+    data = request.get_json() or {}
+    user_input = data.get('input', '').strip()
+    
+    if not user_input:
+        return jsonify({"error": "Please provide your investment query"}), 400
+    
+    try:
+        # Import here to avoid circular imports
+        from agents.extractor import extract_user_intent
+        from agents.advisor import build_advice
+        
+        # Step 1: Extract intent, portfolio, goals from input
+        print(f"📥 Processing input: {user_input[:100]}...")
+        extracted = extract_user_intent(user_input)
+        print(f"✅ Extracted: {extracted}")
+        
+        # Step 2: Build comprehensive advice
+        print("🤖 Generating advice...")
+        result = build_advice(extracted)
+        print("✅ Advice generated")
+        
+        return jsonify({"advice": result})
+        
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "error": f"Failed to generate advice: {str(e)}"
+        }), 500
 
 @app.route('/bills', methods=['GET'])
 def bills():
