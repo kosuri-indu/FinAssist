@@ -1078,22 +1078,28 @@ def agents_center():
 
     return render_template('agents.html', last_runs=last_runs)
 
+# Replace your create_bill and edit_bill functions with these:
+
 @app.route('/bills/create', methods=['POST'])
 def create_bill():
     user = get_current_user()
     if not user:
         return redirect(url_for('index'))
+    
     name = request.form.get('name')
     description = request.form.get('description')
+    # Get tag and payment_mode but store in description or meta field
     tag = request.form.get('tag')
     payment_mode = request.form.get('payment_mode')
     amount = request.form.get('amount')
-    period = request.form.get('period')
+    period = request.form.get('period') or request.form.get('recurring_type')
     first_payment_date = request.form.get('first_payment_date')
+    
     try:
         amount_cents = int(float(amount) * 100)
     except Exception:
         amount_cents = 0
+    
     last_paid = None
     next_due = None
     if first_payment_date:
@@ -1102,21 +1108,61 @@ def create_bill():
             next_due = _compute_next_due_from(last_paid, period, interval_count=1)
         except Exception:
             last_paid = None
-    bill = Bill(user_id=user.id, name=name, description=description, tag=tag, payment_mode=payment_mode, amount_cents=amount_cents, period=period, last_paid=last_paid, next_due=next_due, due_date=next_due)
-    db.session.add(bill)
-    db.session.commit()
-    flash('Bill created.', 'success')
+    
+    # Build enhanced description with tag and payment mode
+    enhanced_desc = description or ''
+    if tag:
+        enhanced_desc = f"[{tag}] {enhanced_desc}".strip()
+    if payment_mode:
+        enhanced_desc = f"{enhanced_desc} (Payment: {payment_mode})".strip()
+    
+    # Create bill with only the fields that exist in the Bill model
+    # Common fields: user_id, name, description, amount_cents, currency, active
+    bill = Bill(
+        user_id=user.id,
+        name=name,
+        description=enhanced_desc,
+        amount_cents=amount_cents,
+        currency='INR',
+        active=True
+    )
+    
+    # Set additional fields if they exist in the model
+    if hasattr(Bill, 'period'):
+        bill.period = period
+    if hasattr(Bill, 'last_paid'):
+        bill.last_paid = last_paid
+    if hasattr(Bill, 'next_due'):
+        bill.next_due = next_due
+    if hasattr(Bill, 'due_date'):
+        bill.due_date = next_due
+    if hasattr(Bill, 'schedule_type'):
+        bill.schedule_type = period
+    if hasattr(Bill, 'interval_count'):
+        bill.interval_count = 1
+    
+    try:
+        db.session.add(bill)
+        db.session.commit()
+        flash('Bill created.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error creating bill: {str(e)}', 'error')
+    
     return redirect(url_for('bills'))
+
 
 @app.route('/bills/<bill_id>/edit', methods=['POST'])
 def edit_bill(bill_id):
     user = get_current_user()
     if not user:
         return redirect(url_for('index'))
+    
     bill = Bill.query.filter_by(id=bill_id, user_id=user.id).first()
     if not bill:
         flash('Bill not found.', 'error')
         return redirect(url_for('bills'))
+    
     name = request.form.get('name')
     description = request.form.get('description')
     tag = request.form.get('tag')
@@ -1124,10 +1170,12 @@ def edit_bill(bill_id):
     amount = request.form.get('amount')
     period = request.form.get('period')
     first_payment_date = request.form.get('first_payment_date')
+    
     try:
         amount_cents = int(float(amount) * 100)
     except Exception:
         amount_cents = 0
+    
     last_paid = bill.last_paid
     next_due = bill.next_due
     if first_payment_date:
@@ -1136,17 +1184,37 @@ def edit_bill(bill_id):
             next_due = _compute_next_due_from(last_paid, period, interval_count=1)
         except Exception:
             pass
+    
+    # Build enhanced description
+    enhanced_desc = description or ''
+    if tag:
+        enhanced_desc = f"[{tag}] {enhanced_desc}".strip()
+    if payment_mode:
+        enhanced_desc = f"{enhanced_desc} (Payment: {payment_mode})".strip()
+    
     bill.name = name
-    bill.description = description
-    bill.tag = tag
-    bill.payment_mode = payment_mode
+    bill.description = enhanced_desc
     bill.amount_cents = amount_cents
-    bill.period = period
-    bill.last_paid = last_paid
-    bill.next_due = next_due
-    bill.due_date = next_due
-    db.session.commit()
-    flash('Bill updated.', 'success')
+    
+    # Update additional fields if they exist
+    if hasattr(bill, 'period'):
+        bill.period = period
+    if hasattr(bill, 'last_paid'):
+        bill.last_paid = last_paid
+    if hasattr(bill, 'next_due'):
+        bill.next_due = next_due
+    if hasattr(bill, 'due_date'):
+        bill.due_date = next_due
+    if hasattr(bill, 'schedule_type'):
+        bill.schedule_type = period
+    
+    try:
+        db.session.commit()
+        flash('Bill updated.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating bill: {str(e)}', 'error')
+    
     return redirect(url_for('bills'))
 
 @app.route('/bills/<bill_id>/delete', methods=['POST'])
