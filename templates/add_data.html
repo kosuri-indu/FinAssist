@@ -1,93 +1,199 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Add Data</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    
-    main.main-content { margin-left: 288px; padding: 2rem; background: #f9fafb; min-height: 100vh; }
-    
-    .page-header { margin-bottom: 2rem; }
-    .page-header h1 { font-size: 2rem; font-weight: 800; color: #111827; }
-    .page-header p { font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem; }
-    
-    .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 2rem; max-width: 48rem; margin: 0 auto; }
-    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    main.main-content {
+      margin-left: 288px;
+      padding: 2rem;
+      background: #f9fafb;
+      min-height: 100vh;
+    }
+
+    .page-header {
+      margin-bottom: 2rem;
+    }
+
+    .page-header h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #111827;
+    }
+
+    .page-header p {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-top: 0.5rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      padding: 2rem;
+      max-width: 48rem;
+      margin: 0 auto;
+    }
+
     /* Type selector tabs */
-    .type-tabs { display: flex; gap: 0.5rem; margin-bottom: 2rem; border-bottom: 2px solid #e5e7eb; }
-    
-    .type-tab { 
-      padding: 0.75rem 1.5rem; 
-      border: none; 
-      background: none; 
-      cursor: pointer; 
-      font-size: 0.875rem; 
-      font-weight: 600; 
-      color: #6b7280; 
-      border-bottom: 3px solid transparent; 
+    .type-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .type-tab {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #6b7280;
+      border-bottom: 3px solid transparent;
       margin-bottom: -2px;
       transition: all 0.2s ease;
     }
-    
-    .type-tab:hover { color: #374151; }
-    
-    .type-tab.active { 
-      color: #1f2937; 
-      border-bottom-color: #10b981; 
+
+    .type-tab:hover {
+      color: #374151;
     }
-    
-    .type-tab.expense.active { border-bottom-color: #ef4444; }
-    .type-tab.income.active { border-bottom-color: #10b981; }
-    .type-tab.bill.active { border-bottom-color: #3b82f6; }
-    
-    .type-tab span { font-size: 1.25rem; margin-right: 0.5rem; }
-    
+
+    .type-tab.active {
+      color: #1f2937;
+      border-bottom-color: #10b981;
+    }
+
+    .type-tab.expense.active {
+      border-bottom-color: #ef4444;
+    }
+
+    .type-tab.income.active {
+      border-bottom-color: #10b981;
+    }
+
+    .type-tab.bill.active {
+      border-bottom-color: #3b82f6;
+    }
+
+    .type-tab span {
+      font-size: 1.25rem;
+      margin-right: 0.5rem;
+    }
+
     /* Form sections */
-    .form-section { display: none; }
-    .form-section.active { display: block; animation: fadeIn 0.2s ease; }
-    
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    
-    .form-section h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
-    
-    .form-section.expense h2 { color: #dc2626; }
-    .form-section.income h2 { color: #16a34a; }
-    .form-section.bill h2 { color: #2563eb; }
-    
-    /* Form grid */
-    .form-grid { display: grid; gap: 1.25rem; }
-    .form-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
-    
-    @media (max-width: 768px) {
-      .form-row { grid-template-columns: 1fr; }
-      main.main-content { margin-left: 0; padding: 1rem; }
-      .card { padding: 1.5rem; }
+    .form-section {
+      display: none;
     }
-    
+
+    .form-section.active {
+      display: block;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    .form-section h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .form-section.expense h2 {
+      color: #dc2626;
+    }
+
+    .form-section.income h2 {
+      color: #16a34a;
+    }
+
+    .form-section.bill h2 {
+      color: #2563eb;
+    }
+
+    /* Form grid */
+    .form-grid {
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+
+    @media (max-width: 768px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+
+      main.main-content {
+        margin-left: 0;
+        padding: 1rem;
+      }
+
+      .card {
+        padding: 1.5rem;
+      }
+    }
+
     /* Form elements */
-    label { display: block; margin-bottom: 0.5rem; }
-    label > div:first-child { font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.375rem; }
-    
-    input[type="text"], 
-    input[type="date"], 
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+
+    label>div:first-child {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.375rem;
+    }
+
+    input[type="text"],
+    input[type="date"],
     input[type="number"],
-    select, 
-    textarea { 
-      width: 100%; 
-      padding: 0.625rem 0.875rem; 
-      border: 1px solid #d1d5db; 
-      border-radius: 6px; 
-      font-size: 0.875rem; 
+    select,
+    textarea {
+      width: 100%;
+      padding: 0.625rem 0.875rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.875rem;
       font-family: inherit;
       transition: all 0.2s ease;
       background-color: white;
       color: #111827;
     }
-    
+
     /* Dropdown styling */
     select {
       appearance: none;
@@ -98,527 +204,574 @@
       padding-right: 2rem;
       cursor: pointer;
     }
-    
-    select:hover { 
-      border-color: #6b7280; 
+
+    select:hover {
+      border-color: #6b7280;
       background-color: #f9fafb;
     }
-    
-    select:disabled { 
-      opacity: 0.6; 
-      cursor: not-allowed; 
+
+    select:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
       background-color: #f3f4f6;
     }
-    
-    input[type="text"]:focus, 
-    input[type="date"]:focus, 
+
+    input[type="text"]:focus,
+    input[type="date"]:focus,
     input[type="number"]:focus,
-    select:focus, 
-    textarea:focus { 
-      outline: none; 
-      border-color: #3b82f6; 
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); 
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
-    
+
     /* Invalid input styling */
     input:invalid:not(:placeholder-shown),
     select:invalid:not([value=""]),
     textarea:invalid:not(:placeholder-shown) {
       border-color: #ef4444;
     }
-    
+
     input:invalid:not(:placeholder-shown):focus,
     select:invalid:focus,
     textarea:invalid:not(:placeholder-shown):focus {
       box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
     }
-    
+
     /* Required field indicator */
-    label > div:first-child::after {
+    label>div:first-child::after {
       content: ' *';
       color: #ef4444;
       display: inline;
     }
-    
-    label > div:first-child.optional::after {
+
+    label>div:first-child.optional::after {
       content: ' (Optional)';
       color: #6b7280;
       font-size: 0.75rem;
     }
-    
-    textarea { resize: vertical; min-height: 80px; }
-    
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
     /* Submit buttons */
-    .form-actions { margin-top: 2rem; }
-    
-    button[type="submit"] { 
-      width: 100%; 
-      padding: 0.75rem; 
-      border: none; 
-      border-radius: 6px; 
-      font-size: 0.875rem; 
-      font-weight: 600; 
-      cursor: pointer; 
+    .form-actions {
+      margin-top: 2rem;
+    }
+
+    button[type="submit"] {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
       color: white;
       transition: all 0.2s ease;
     }
-    
-    .form-section.expense button[type="submit"] { background-color: #dc2626; }
-    .form-section.expense button[type="submit"]:hover { background-color: #b91c1c; }
-    
-    .form-section.income button[type="submit"] { background-color: #16a34a; }
-    .form-section.income button[type="submit"]:hover { background-color: #15803d; }
-    
-    .form-section.bill button[type="submit"] { background-color: #2563eb; }
-    .form-section.bill button[type="submit"]:hover { background-color: #1d4ed8; }
-    
-    button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
-    
+
+    .form-section.expense button[type="submit"] {
+      background-color: #dc2626;
+    }
+
+    .form-section.expense button[type="submit"]:hover {
+      background-color: #b91c1c;
+    }
+
+    .form-section.income button[type="submit"] {
+      background-color: #16a34a;
+    }
+
+    .form-section.income button[type="submit"]:hover {
+      background-color: #15803d;
+    }
+
+    .form-section.bill button[type="submit"] {
+      background-color: #2563eb;
+    }
+
+    .form-section.bill button[type="submit"]:hover {
+      background-color: #1d4ed8;
+    }
+
+    button[type="submit"]:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     /* Toast notifications */
-    .toast { 
-      position: fixed; 
-      bottom: 2rem; 
-      right: 2rem; 
-      padding: 1rem 1.5rem; 
-      border-radius: 6px; 
-      background: white; 
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      padding: 1rem 1.5rem;
+      border-radius: 6px;
+      background: white;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       z-index: 1000;
       animation: slideIn 0.3s ease;
     }
-    
-    @keyframes slideIn { 
-      from { transform: translateX(400px); opacity: 0; } 
-      to { transform: translateX(0); opacity: 1; } 
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
     }
-    
-    .toast.success { border-left: 4px solid #10b981; color: #047857; }
-    .toast.error { border-left: 4px solid #dc2626; color: #991b1b; }
-    
+
+    .toast.success {
+      border-left: 4px solid #10b981;
+      color: #047857;
+    }
+
+    .toast.error {
+      border-left: 4px solid #dc2626;
+      color: #991b1b;
+    }
+
     @media (max-width: 640px) {
-      .toast { bottom: 1rem; right: 1rem; left: 1rem; }
+      .toast {
+        bottom: 1rem;
+        right: 1rem;
+        left: 1rem;
+      }
     }
   </style>
 </head>
+
 <body>
-    {% include 'sidebar.html' %}
+  {% include 'sidebar.html' %}
 
-    <main class="main-content">
-      <div class="page-header">
-        <h1>Add Financial Data</h1>
-        <p>Track your expenses, income, and recurring bills</p>
+  <main class="main-content">
+    <div class="page-header">
+      <h1>Add Financial Data</h1>
+      <p>Track your expenses, income, and recurring bills</p>
+    </div>
+
+    <div class="card">
+      <!-- Type selector tabs -->
+      <div class="type-tabs">
+        <button class="type-tab active expense" data-type="expense">
+          <span>💸</span>Expense
+        </button>
+        <button class="type-tab income" data-type="income">
+          <span>💰</span>Income
+        </button>
+        <button class="type-tab bill" data-type="bill">
+          <span>📄</span>Bill
+        </button>
       </div>
 
-      <div class="card">
-        <!-- Type selector tabs -->
-        <div class="type-tabs">
-          <button class="type-tab active expense" data-type="expense">
-            <span>💸</span>Expense
-          </button>
-          <button class="type-tab income" data-type="income">
-            <span>💰</span>Income
-          </button>
-          <button class="type-tab bill" data-type="bill">
-            <span>📄</span>Bill
-          </button>
-        </div>
+      <!-- Category suggestions datalist -->
+      <datalist id="categories">
+        <option>Food</option>
+        <option>Groceries</option>
+        <option>Dining Out</option>
+        <option>Restaurants</option>
+        <option>Travel</option>
+        <option>Transport</option>
+        <option>Taxi</option>
+        <option>Fuel</option>
+        <option>Rent</option>
+        <option>Mortgage</option>
+        <option>Utilities - Electricity</option>
+        <option>Utilities - Water</option>
+        <option>Utilities - Gas</option>
+        <option>Internet</option>
+        <option>Phone</option>
+        <option>Insurance</option>
+        <option>Healthcare</option>
+        <option>Medicine</option>
+        <option>Fitness</option>
+        <option>Subscriptions</option>
+        <option>Education</option>
+        <option>Books</option>
+        <option>Office Supplies</option>
+        <option>Gifts</option>
+        <option>Charity</option>
+        <option>Taxes</option>
+        <option>Salary</option>
+        <option>Freelance</option>
+        <option>Investment Income</option>
+        <option>Interest</option>
+        <option>Transfer</option>
+        <option>Pets</option>
+        <option>Home Improvement</option>
+        <option>Clothing</option>
+        <option>Beauty</option>
+        <option>Entertainment</option>
+        <option>Electronics</option>
+        <option>Parking</option>
+        <option>Toll</option>
+        <option>Maintenance</option>
+      </datalist>
 
-        <!-- Category suggestions datalist -->
-        <datalist id="categories">
-          <option>Food</option>
-          <option>Groceries</option>
-          <option>Dining Out</option>
-          <option>Restaurants</option>
-          <option>Travel</option>
-          <option>Transport</option>
-          <option>Taxi</option>
-          <option>Fuel</option>
-          <option>Rent</option>
-          <option>Mortgage</option>
-          <option>Utilities - Electricity</option>
-          <option>Utilities - Water</option>
-          <option>Utilities - Gas</option>
-          <option>Internet</option>
-          <option>Phone</option>
-          <option>Insurance</option>
-          <option>Healthcare</option>
-          <option>Medicine</option>
-          <option>Fitness</option>
-          <option>Subscriptions</option>
-          <option>Education</option>
-          <option>Books</option>
-          <option>Office Supplies</option>
-          <option>Gifts</option>
-          <option>Charity</option>
-          <option>Taxes</option>
-          <option>Salary</option>
-          <option>Freelance</option>
-          <option>Investment Income</option>
-          <option>Interest</option>
-          <option>Transfer</option>
-          <option>Pets</option>
-          <option>Home Improvement</option>
-          <option>Clothing</option>
-          <option>Beauty</option>
-          <option>Entertainment</option>
-          <option>Electronics</option>
-          <option>Parking</option>
-          <option>Toll</option>
-          <option>Maintenance</option>
-        </datalist>
+      <!-- EXPENSE FORM -->
+      <div class="form-section expense active">
+        <h2><span>💸</span>Add Expense</h2>
+        <form id="form-expense" action="/transactions/create" method="post" class="form-grid">
+          <input type="hidden" name="txn_type" value="expense">
 
-        <!-- EXPENSE FORM -->
-        <div class="form-section expense active">
-          <h2><span>💸</span>Add Expense</h2>
-          <form id="form-expense" action="/transactions/create" method="post" class="form-grid">
-            <input type="hidden" name="txn_type" value="expense">
-            
-            <div class="form-row">
-              <label>
-                <div>Amount (₹)</div>
-                <input name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
-              </label>
-              <label>
-                <div>Category</div>
-                <select name="category" required>
-                  <option value="">-- Select Category --</option>
-                  <option>Food & Dining</option>
-                  <option>Groceries</option>
-                  <option>Restaurants</option>
-                  <option>Transport & Travel</option>
-                  <option>Taxi/Cab</option>
-                  <option>Fuel</option>
-                  <option>Public Transport</option>
-                  <option>Housing</option>
-                  <option>Rent</option>
-                  <option>Maintenance</option>
-                  <option>Utilities</option>
-                  <option>Electricity</option>
-                  <option>Water</option>
-                  <option>Gas</option>
-                  <option>Internet & Mobile</option>
-                  <option>Internet</option>
-                  <option>Mobile/Phone</option>
-                  <option>Insurance</option>
-                  <option>Health & Medical</option>
-                  <option>Medicine</option>
-                  <option>Doctor Visit</option>
-                  <option>Fitness & Wellness</option>
-                  <option>Gym Membership</option>
-                  <option>Shopping & Entertainment</option>
-                  <option>Clothing</option>
-                  <option>Entertainment</option>
-                  <option>Movies & Events</option>
-                  <option>Books & Education</option>
-                  <option>Education</option>
-                  <option>Subscriptions</option>
-                  <option>Other Expenses</option>
-                  <option>Gifts & Charity</option>
-                  <option>Pets</option>
-                  <option>Miscellaneous</option>
-                </select>
-              </label>
-            </div>
-            
-            <div class="form-row">
-              <label>
-                <div>Date</div>
-                <input name="occurred_at" type="date" required />
-              </label>
-              <label>
-                <div>Payment Mode</div>
-                <select name="payment_mode" required>
-                  <option value="">-- Select Mode --</option>
-                  <option selected>Cash</option>
-                  <option>Debit Card</option>
-                  <option>Credit Card</option>
-                  <option>UPI</option>
-                  <option>Net Banking</option>
-                  <option>Bank Transfer</option>
-                  <option>Mobile Wallet</option>
-                  <option>Cheque</option>
-                  <option>Other</option>
-                </select>
-              </label>
-            </div>
-            
-            <label class="form-row full">
-              <div class="optional">Description</div>
-              <textarea name="description" placeholder="Add any notes, merchant details, etc..."></textarea>
+          <div class="form-row">
+            <label>
+              <div>Amount (₹)</div>
+              <input name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
             </label>
-            
-            <div class="form-actions">
-              <button type="submit">💸 Add Expense</button>
-            </div>
-          </form>
-        </div>
-
-        <!-- INCOME FORM -->
-        <div class="form-section income">
-          <h2><span>💰</span>Add Income</h2>
-          <form id="form-income" action="/transactions/create" method="post" class="form-grid">
-            <input type="hidden" name="txn_type" value="income">
-            
-            <div class="form-row">
-              <label>
-                <div>Amount (₹)</div>
-                <input name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
-              </label>
-              <label>
-                <div>Source</div>
-                <select name="category" required>
-                  <option value="">-- Select Source --</option>
-                  <option selected>Salary</option>
-                  <option>Freelance Work</option>
-                  <option>Bonus</option>
-                  <option>Investment Income</option>
-                  <option>Interest</option>
-                  <option>Rental Income</option>
-                  <option>Business Income</option>
-                  <option>Gift</option>
-                  <option>Refund</option>
-                  <option>Reimbursement</option>
-                  <option>Other Income</option>
-                </select>
-              </label>
-            </div>
-            
-            <div class="form-row">
-              <label>
-                <div>Date</div>
-                <input name="occurred_at" type="date" required />
-              </label>
-              <label>
-                <div>Payer/Source Name</div>
-                <input name="source" type="text" placeholder="e.g., Acme Corp" required />
-              </label>
-            </div>
-            
-            <label class="form-row full">
-              <div class="optional">Description</div>
-              <textarea name="description" placeholder="Add any notes..."></textarea>
+            <label>
+              <div>Category</div>
+              <select name="category" required>
+                <option value="">-- Select Category --</option>
+                <option>Food & Dining</option>
+                <option>Groceries</option>
+                <option>Restaurants</option>
+                <option>Transport & Travel</option>
+                <option>Taxi/Cab</option>
+                <option>Fuel</option>
+                <option>Public Transport</option>
+                <option>Housing</option>
+                <option>Rent</option>
+                <option>Maintenance</option>
+                <option>Utilities</option>
+                <option>Electricity</option>
+                <option>Water</option>
+                <option>Gas</option>
+                <option>Internet & Mobile</option>
+                <option>Internet</option>
+                <option>Mobile/Phone</option>
+                <option>Insurance</option>
+                <option>Health & Medical</option>
+                <option>Medicine</option>
+                <option>Doctor Visit</option>
+                <option>Fitness & Wellness</option>
+                <option>Gym Membership</option>
+                <option>Shopping & Entertainment</option>
+                <option>Clothing</option>
+                <option>Entertainment</option>
+                <option>Movies & Events</option>
+                <option>Books & Education</option>
+                <option>Education</option>
+                <option>Subscriptions</option>
+                <option>Other Expenses</option>
+                <option>Gifts & Charity</option>
+                <option>Pets</option>
+                <option>Miscellaneous</option>
+              </select>
             </label>
-            
-            <div class="form-actions">
-              <button type="submit">💰 Add Income</button>
-            </div>
-          </form>
-        </div>
+          </div>
 
-        <!-- BILL FORM -->
-        <div class="form-section bill">
-          <h2><span>📄</span>Add Bill</h2>
-          <form id="form-bill" action="/bills/create" method="post" class="form-grid">
-            
-            <div class="form-row">
-              <label>
-                <div>Bill Name</div>
-                <input name="name" type="text" placeholder="e.g., Electricity Bill" required />
-              </label>
-              <label>
-                <div>Amount (₹)</div>
-                <input name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
-              </label>
-            </div>
-            
-            <div class="form-row">
-              <label>
-                <div>Category</div>
-                <select name="tag" required>
-                  <option value="">-- Select Category --</option>
-                  <option selected>Utilities - Electricity</option>
-                  <option>Utilities - Water</option>
-                  <option>Utilities - Gas</option>
-                  <option>Internet & Mobile</option>
-                  <option>Internet</option>
-                  <option>Mobile/Phone</option>
-                  <option>Insurance</option>
-                  <option>Health Insurance</option>
-                  <option>Home Insurance</option>
-                  <option>Auto Insurance</option>
-                  <option>Housing</option>
-                  <option>Rent</option>
-                  <option>Mortgage</option>
-                  <option>HOA Fees</option>
-                  <option>Subscriptions</option>
-                  <option>Streaming Services</option>
-                  <option>Gym Membership</option>
-                  <option>Software Subscription</option>
-                  <option>Transport</option>
-                  <option>Car Payment</option>
-                  <option>Fuel Card</option>
-                  <option>Loan Payment</option>
-                  <option>Education</option>
-                  <option>Pet Care</option>
-                  <option>Other Bills</option>
-                </select>
-              </label>
-              <label>
-                <div>Frequency</div>
-                <select name="recurring_type" required>
-                  <option value="one-time">One-time</option>
-                  <option value="monthly" selected>Monthly</option>
-                  <option value="quarterly">Quarterly (3 months)</option>
-                  <option value="bi-annual">Bi-annual (6 months)</option>
-                  <option value="yearly">Yearly (12 months)</option>
-                  <option value="custom">Custom</option>
-                </select>
-              </label>
-            </div>
-            
-            <div class="form-row">
-              <label>
-                <div>First Due Date</div>
-                <input name="first_payment_date" type="date" required />
-              </label>
-              <label>
-                <div>Bill Duration</div>
-                <select name="bill_duration" required>
-                  <option value="forever" selected>Forever (Ongoing)</option>
-                  <option value="limited">Limited Period</option>
-                </select>
-              </label>
-            </div>
-            
-            <div id="expiry-section" class="form-row" style="display: none;">
-              <label>
-                <div class="optional">End/Expiry Date</div>
-                <input name="end_date" type="date" />
-              </label>
-              <label>
-                <div class="optional">Expected Cycles</div>
-                <input name="expected_cycles" type="number" min="1" placeholder="e.g., 12" />
-              </label>
-            </div>
-            
-            <label class="form-row full">
-              <div class="optional">Reminder Note</div>
-              <input name="reminder_text" type="text" placeholder="e.g., Pay before 5th of the month or any important notes" />
+          <div class="form-row">
+            <label>
+              <div>Date</div>
+              <input name="occurred_at" type="date" required />
             </label>
-            
-            <div class="form-actions">
-              <button type="submit">📄 Add Bill</button>
-            </div>
-          </form>
-        </div>
+            <label>
+              <div>Payment Mode</div>
+              <select name="payment_mode" required>
+                <option value="">-- Select Mode --</option>
+                <option selected>Cash</option>
+                <option>Debit Card</option>
+                <option>Credit Card</option>
+                <option>UPI</option>
+                <option>Net Banking</option>
+                <option>Bank Transfer</option>
+                <option>Mobile Wallet</option>
+                <option>Cheque</option>
+                <option>Other</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="form-row full">
+            <div class="optional">Description</div>
+            <textarea name="description" placeholder="Add any notes, merchant details, etc..."></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button type="submit">💸 Add Expense</button>
+          </div>
+        </form>
       </div>
-    </main>
 
-    <script>
-      // Tab switching
-      document.querySelectorAll('.type-tab').forEach(tab => {
-        tab.addEventListener('click', function() {
-          const type = this.dataset.type;
-          
-          // Update active tab
-          document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
-          this.classList.add('active');
-          
-          // Update active form
-          document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
-          document.querySelector(`.form-section.${type}`).classList.add('active');
-        });
+      <!-- INCOME FORM -->
+      <div class="form-section income">
+        <h2><span>💰</span>Add Income</h2>
+        <form id="form-income" action="/transactions/create" method="post" class="form-grid">
+          <input type="hidden" name="txn_type" value="income">
+
+          <div class="form-row">
+            <label>
+              <div>Amount (₹)</div>
+              <input name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
+            </label>
+            <label>
+              <div>Source</div>
+              <select name="category" required>
+                <option value="">-- Select Source --</option>
+                <option selected>Salary</option>
+                <option>Freelance Work</option>
+                <option>Bonus</option>
+                <option>Investment Income</option>
+                <option>Interest</option>
+                <option>Rental Income</option>
+                <option>Business Income</option>
+                <option>Gift</option>
+                <option>Refund</option>
+                <option>Reimbursement</option>
+                <option>Other Income</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-row">
+            <label>
+              <div>Date</div>
+              <input name="occurred_at" type="date" required />
+            </label>
+            <label>
+              <div>Payer/Source Name</div>
+              <input name="source" type="text" placeholder="e.g., Acme Corp" required />
+            </label>
+          </div>
+
+          <label class="form-row full">
+            <div class="optional">Description</div>
+            <textarea name="description" placeholder="Add any notes..."></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button type="submit">💰 Add Income</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- BILL FORM -->
+      <div class="form-section bill">
+        <h2><span>📄</span>Add Bill</h2>
+        <form id="form-bill" action="/bills/create" method="post" class="form-grid">
+
+          <div class="form-row">
+            <label>
+              <div>Bill Name</div>
+              <input name="name" type="text" placeholder="e.g., Electricity Bill" required />
+            </label>
+            <label>
+              <div>Amount (₹)</div>
+              <input name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
+            </label>
+          </div>
+
+          <div class="form-row">
+            <label>
+              <div>Category</div>
+              <select name="tag" required>
+                <option value="">-- Select Category --</option>
+                <option selected>Utilities - Electricity</option>
+                <option>Utilities - Water</option>
+                <option>Utilities - Gas</option>
+                <option>Internet & Mobile</option>
+                <option>Internet</option>
+                <option>Mobile/Phone</option>
+                <option>Insurance</option>
+                <option>Health Insurance</option>
+                <option>Home Insurance</option>
+                <option>Auto Insurance</option>
+                <option>Housing</option>
+                <option>Rent</option>
+                <option>Mortgage</option>
+                <option>HOA Fees</option>
+                <option>Subscriptions</option>
+                <option>Streaming Services</option>
+                <option>Gym Membership</option>
+                <option>Software Subscription</option>
+                <option>Transport</option>
+                <option>Car Payment</option>
+                <option>Fuel Card</option>
+                <option>Loan Payment</option>
+                <option>Education</option>
+                <option>Pet Care</option>
+                <option>Other Bills</option>
+              </select>
+            </label>
+            <label>
+              <div>Frequency</div>
+              <select name="recurring_type" required>
+                <option value="one-time">One-time</option>
+                <option value="monthly" selected>Monthly</option>
+                <option value="quarterly">Quarterly (3 months)</option>
+                <option value="bi-annual">Bi-annual (6 months)</option>
+                <option value="yearly">Yearly (12 months)</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-row">
+            <label>
+              <div>First Due Date</div>
+              <input name="first_payment_date" type="date" required />
+            </label>
+            <label>
+              <div>Bill Duration</div>
+              <select name="bill_duration" required>
+                <option value="forever" selected>Forever (Ongoing)</option>
+                <option value="limited">Limited Period</option>
+              </select>
+            </label>
+          </div>
+
+          <div id="expiry-section" class="form-row" style="display: none;">
+            <label>
+              <div class="optional">End/Expiry Date</div>
+              <input name="end_date" type="date" />
+            </label>
+            <label>
+              <div class="optional">Expected Cycles</div>
+              <input name="expected_cycles" type="number" min="1" placeholder="e.g., 12" />
+            </label>
+          </div>
+
+          <label class="form-row full">
+            <div class="optional">Reminder Note</div>
+            <input name="reminder_text" type="text"
+              placeholder="e.g., Pay before 5th of the month or any important notes" />
+          </label>
+
+          <div class="form-actions">
+            <button type="submit">📄 Add Bill</button>
+          </div>
+        </form>
+      </div>
+
+
+    </div>
+  </main>
+
+  <script>
+    // Tab switching
+    document.querySelectorAll('.type-tab').forEach(tab => {
+      tab.addEventListener('click', function () {
+        const type = this.dataset.type;
+
+        // Update active tab
+        document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+
+        // Update active form
+        document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
+        document.querySelector(`.form-section.${type}`).classList.add('active');
       });
-      
-      // Set today's date by default
-      document.querySelectorAll('input[type="date"]').forEach(input => {
-        if (!input.value) {
-          const today = new Date().toISOString().split('T')[0];
-          input.value = today;
+    });
+
+    // Set today's date by default
+    document.querySelectorAll('input[type="date"]').forEach(input => {
+      if (!input.value) {
+        const today = new Date().toISOString().split('T')[0];
+        input.value = today;
+      }
+    });
+
+    // Show/hide expiry date based on bill duration selection
+    const billDurationSelect = document.querySelector('select[name="bill_duration"]');
+    const expirySection = document.getElementById('expiry-section');
+
+    if (billDurationSelect) {
+      billDurationSelect.addEventListener('change', function () {
+        if (this.value === 'limited') {
+          expirySection.style.display = 'grid';
+        } else {
+          expirySection.style.display = 'none';
         }
       });
-      
-      // Show/hide expiry date based on bill duration selection
-      const billDurationSelect = document.querySelector('select[name="bill_duration"]');
-      const expirySection = document.getElementById('expiry-section');
-      
-      if (billDurationSelect) {
-        billDurationSelect.addEventListener('change', function() {
-          if (this.value === 'limited') {
-            expirySection.style.display = 'grid';
+    }
+
+    // Form submission with toast notification
+    document.querySelectorAll('form').forEach(form => {
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const btn = this.querySelector('button[type="submit"]');
+
+        // Validate required fields
+        const requiredFields = this.querySelectorAll('[required]');
+        let isValid = true;
+        let firstInvalidField = null;
+
+        requiredFields.forEach(field => {
+          if (!field.value || field.value.trim() === '') {
+            isValid = false;
+            field.style.borderColor = '#ef4444';
+            if (!firstInvalidField) firstInvalidField = field;
           } else {
-            expirySection.style.display = 'none';
+            field.style.borderColor = '#d1d5db';
           }
         });
-      }
-      
-      // Form submission with toast notification
-      document.querySelectorAll('form').forEach(form => {
-        form.addEventListener('submit', async function(e) {
-          e.preventDefault();
-          const btn = this.querySelector('button[type="submit"]');
-          
-          // Validate required fields
-          const requiredFields = this.querySelectorAll('[required]');
-          let isValid = true;
-          let firstInvalidField = null;
-          
-          requiredFields.forEach(field => {
-            if (!field.value || field.value.trim() === '') {
-              isValid = false;
-              field.style.borderColor = '#ef4444';
-              if (!firstInvalidField) firstInvalidField = field;
-            } else {
-              field.style.borderColor = '#d1d5db';
-            }
-          });
-          
-          if (!isValid) {
-            showToast('❌ Please fill in all required fields', 'error');
-            if (firstInvalidField) firstInvalidField.focus();
+
+        if (!isValid) {
+          showToast('❌ Please fill in all required fields', 'error');
+          if (firstInvalidField) firstInvalidField.focus();
+          return;
+        }
+
+        // Validate amount field
+        const amountField = this.querySelector('input[name="amount"]');
+        if (amountField) {
+          const amount = parseFloat(amountField.value);
+          if (isNaN(amount) || amount <= 0) {
+            showToast('❌ Please enter a valid amount greater than 0', 'error');
+            amountField.focus();
             return;
           }
-          
-          // Validate amount field
-          const amountField = this.querySelector('input[name="amount"]');
-          if (amountField) {
-            const amount = parseFloat(amountField.value);
-            if (isNaN(amount) || amount <= 0) {
-              showToast('❌ Please enter a valid amount greater than 0', 'error');
-              amountField.focus();
-              return;
-            }
+        }
+
+        btn.disabled = true;
+
+        try {
+          const res = await fetch(this.action, {
+            method: 'POST',
+            body: new FormData(this)
+          });
+
+          if (res.ok) {
+            showToast('✅ Added successfully!', 'success');
+            this.reset();
+            // Reset date to today
+            const today = new Date().toISOString().split('T')[0];
+            this.querySelectorAll('input[type="date"]').forEach(input => input.value = today);
+            // Reset border colors
+            requiredFields.forEach(field => field.style.borderColor = '#d1d5db');
+          } else {
+            showToast('❌ Failed to add. Please check your input.', 'error');
           }
-          
-          btn.disabled = true;
-          
-          try {
-            const res = await fetch(this.action, {
-              method: 'POST',
-              body: new FormData(this)
-            });
-            
-            if (res.ok) {
-              showToast('✅ Added successfully!', 'success');
-              this.reset();
-              // Reset date to today
-              const today = new Date().toISOString().split('T')[0];
-              this.querySelectorAll('input[type="date"]').forEach(input => input.value = today);
-              // Reset border colors
-              requiredFields.forEach(field => field.style.borderColor = '#d1d5db');
-            } else {
-              showToast('❌ Failed to add. Please check your input.', 'error');
-            }
-          } catch (e) {
-            showToast('❌ Error: ' + e.message, 'error');
-          } finally {
-            btn.disabled = false;
-          }
-        });
+        } catch (e) {
+          showToast('❌ Error: ' + e.message, 'error');
+        } finally {
+          btn.disabled = false;
+        }
       });
-      
-      function showToast(message, type = 'success') {
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        
-        setTimeout(() => {
-          toast.style.animation = 'slideOut 0.3s ease forwards';
-          setTimeout(() => toast.remove(), 300);
-        }, 3000);
-      }
-    </script>
+    });
+
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+
+  </script>
 </body>
+
 </html>
-  

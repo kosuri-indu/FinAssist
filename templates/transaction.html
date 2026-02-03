@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bills.css') }}">
 </head>
+
 <body>
     {% include 'sidebar.html' %}
     <main class="main-content ml-72 p-8">
@@ -25,15 +27,21 @@
                             <div>
                                 <div class="text-sm font-medium text-gray-800">{{ b.name }}</div>
                                 <div class="text-xs text-gray-500">{{ b.description or '' }}</div>
-                                <div class="text-xs text-gray-600 mt-1">Amount: ₹{{ '%.2f' | format(b.amount_cents / 100.0) }} • Due: {{ b.next_due.strftime('%Y-%m-%d') if b.next_due else 'N/A' }}</div>
+                                <div class="text-xs text-gray-600 mt-1">Amount: ₹{{ '%.2f' | format(b.amount_cents /
+                                    100.0) }} • Due: {{ b.next_due.strftime('%Y-%m-%d') if b.next_due else 'N/A' }}
+                                </div>
                             </div>
                             <div class="flex flex-col items-end gap-2">
-                                <form action="/bills/{{ b.id }}/delete" method="post" class="inline" onsubmit="return confirm('Delete this bill?');">
-                                       <button title="Delete bill" class="p-2 text-red-600 hover:bg-red-50 rounded-full">
-                                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                               <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H3a1 1 0 100 2h1v9a2 2 0 002 2h6a2 2 0 002-2V6h1a1 1 0 100-2h-2V3a1 1 0 00-1-1H6zm2 5a1 1 0 012 0v7a1 1 0 11-2 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clip-rule="evenodd" />
-                                           </svg>
-                                       </button>
+                                <form action="/bills/{{ b.id }}/delete" method="post" class="inline"
+                                    onsubmit="return confirm('Delete this bill?');">
+                                    <button title="Delete bill" class="p-2 text-red-600 hover:bg-red-50 rounded-full">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
+                                            fill="currentColor" aria-hidden="true">
+                                            <path fill-rule="evenodd"
+                                                d="M6 2a1 1 0 00-1 1v1H3a1 1 0 100 2h1v9a2 2 0 002 2h6a2 2 0 002-2V6h1a1 1 0 100-2h-2V3a1 1 0 00-1-1H6zm2 5a1 1 0 012 0v7a1 1 0 11-2 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z"
+                                                clip-rule="evenodd" />
+                                        </svg>
+                                    </button>
                                 </form>
                             </div>
                         </div>
@@ -54,7 +62,8 @@
                     <!-- Filters -->
                     <div class="mb-4">
                         <div class="flex flex-col md:flex-row md:items-center md:gap-3">
-                            <input id="filterSearch" type="text" placeholder="Search description..." class="px-2 py-2 border rounded text-sm w-full md:w-48" />
+                            <input id="filterSearch" type="text" placeholder="Search description..."
+                                class="px-2 py-2 border rounded text-sm w-full md:w-48" />
                             <select id="filterType" class="px-2 py-2 border rounded text-sm w-full md:w-36">
                                 <option value="all">All Types</option>
                                 <option value="income">Income</option>
@@ -73,34 +82,69 @@
                         </div>
                     </div>
 
-                    <div class="text-xs text-gray-500 mb-3">Showing <span id="txnCount">{{ transactions|length }}</span> transactions</div>
+                    <div class="text-xs text-gray-500 mb-3">Showing <span id="txnCount">{{ transactions|length }}</span>
+                        transactions</div>
+
+                    <!-- Transaction summary (totals + per-category breakdown for visible transactions) -->
+                    <div id="txnSummary" class="mb-4 bg-gray-50 p-3 rounded text-sm">
+                        <div class="flex items-center justify-between mb-2">
+                            <div><strong>Total (Net):</strong> <span id="totalVisible">₹0.00</span></div>
+                            <div><strong>Expenses:</strong> <span id="totalExpenses">₹0.00</span> &nbsp;
+                                <strong>Income:</strong> <span id="totalIncome">₹0.00</span></div>
+                        </div>
+                        <div>
+                            <table id="categoryBreakdown" class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-xs text-gray-500">
+                                        <th class="text-left">Category</th>
+                                        <th class="text-right">Amount (₹)</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
 
                     <div id="transactionsList" class="divide-y">
                         {% for t in transactions %}
-                        <div class="py-4 flex items-start justify-between txn-row" data-desc="{{ (t.description or '')|e }}" data-cat="{{ (t.category_name or '')|e }}" data-type="{{ t.txn_type }}" data-date="{{ t.occurred_at.isoformat() if t.occurred_at else '' }}" data-amount="{{ (t.amount_cents / 100.0) }}">
+                        <div class="py-4 flex items-start justify-between txn-row"
+                            data-desc="{{ (t.description or '')|e }}" data-cat="{{ (t.category_name or '')|e }}"
+                            data-type="{{ t.txn_type }}"
+                            data-date="{{ t.occurred_at.isoformat() if t.occurred_at else '' }}"
+                            data-amount="{{ (t.amount_cents / 100.0) }}">
                             <div class="flex items-start gap-4">
-                                <div class="w-10 h-10 flex items-center justify-center rounded-full {% if t.txn_type == 'expense' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+                                <div
+                                    class="w-10 h-10 flex items-center justify-center rounded-full {% if t.txn_type == 'expense' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
                                     {% if t.txn_type == 'expense' %}-{% else %}+{% endif %}
                                 </div>
                                 <div>
-                                    <div class="text-sm font-medium text-gray-800">{{ t.description or (t.txn_type|capitalize) }}</div>
-                                    <div class="text-xs text-gray-500">{{ t.category_name or '' }} • {{ t.occurred_at.strftime('%Y-%m-%d %H:%M') if t.occurred_at }}</div>
+                                    <div class="text-sm font-medium text-gray-800">{{ t.description or
+                                        (t.txn_type|capitalize) }}</div>
+                                    <div class="text-xs text-gray-500">{{ t.category_name or '' }} • {{
+                                        t.occurred_at.strftime('%Y-%m-%d %H:%M') if t.occurred_at }}</div>
                                     {% if t.meta %}
                                     <div class="mt-2 flex flex-wrap gap-1">
                                         {% for k,v in t.meta.items() %}
-                                        <span class="text-xs bg-gray-100 border px-2 py-0.5 rounded text-gray-600">{{ k }}: {{ v }}</span>
+                                        <span class="text-xs bg-gray-100 border px-2 py-0.5 rounded text-gray-600">{{ k
+                                            }}: {{ v }}</span>
                                         {% endfor %}
                                     </div>
                                     {% endif %}
                                 </div>
                             </div>
                             <div class="flex flex-col items-end gap-2">
-                                <div class="text-sm font-semibold text-gray-800">₹{{ '%.2f' | format(t.amount_cents / 100.0) }}</div>
+                                <div class="text-sm font-semibold text-gray-800">₹{{ '%.2f' | format(t.amount_cents /
+                                    100.0) }}</div>
                                 <div class="flex gap-2">
-                                    <form action="/transactions/{{ t.id }}/delete" method="post" class="inline" onsubmit="return confirm('Delete this transaction?');">
-                                        <button title="Delete transaction" class="p-2 text-red-600 hover:bg-red-50 rounded-full">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                                <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H3a1 1 0 100 2h1v9a2 2 0 002 2h6a2 2 0 002-2V6h1a1 1 0 100-2h-2V3a1 1 0 00-1-1H6zm2 5a1 1 0 012 0v7a1 1 0 11-2 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clip-rule="evenodd" />
+                                    <form action="/transactions/{{ t.id }}/delete" method="post" class="inline"
+                                        onsubmit="return confirm('Delete this transaction?');">
+                                        <button title="Delete transaction"
+                                            class="p-2 text-red-600 hover:bg-red-50 rounded-full">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
+                                                fill="currentColor" aria-hidden="true">
+                                                <path fill-rule="evenodd"
+                                                    d="M6 2a1 1 0 00-1 1v1H3a1 1 0 100 2h1v9a2 2 0 002 2h6a2 2 0 002-2V6h1a1 1 0 100-2h-2V3a1 1 0 00-1-1H6zm2 5a1 1 0 012 0v7a1 1 0 11-2 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z"
+                                                    clip-rule="evenodd" />
                                             </svg>
                                         </button>
                                     </form>
@@ -114,7 +158,7 @@
 
                     <script>
                         // Client-side filtering for transactions
-                        (function(){
+                        (function () {
                             const search = document.getElementById('filterSearch');
                             const type = document.getElementById('filterType');
                             const category = document.getElementById('filterCategory');
@@ -123,7 +167,7 @@
                             const rows = Array.from(document.querySelectorAll('.txn-row'));
                             const countEl = document.getElementById('txnCount');
 
-                            function applyFilters(){
+                            function applyFilters() {
                                 const qs = (search && search.value) ? search.value.toLowerCase().trim() : '';
                                 const tp = type && type.value ? type.value : 'all';
                                 const cat = category && category.value ? category.value : 'all';
@@ -136,30 +180,83 @@
                                     const rtype = r.dataset.type || '';
                                     const rdate = r.dataset.date ? new Date(r.dataset.date) : null;
                                     let show = true;
-                                    
+
                                     // Search filter
-                                    if(qs){
+                                    if (qs) {
                                         show = desc.indexOf(qs) !== -1 || (r.dataset.amount && r.dataset.amount.indexOf(qs) !== -1);
                                     }
-                                    
+
                                     // Type filter
-                                    if(show && tp !== 'all') show = (rtype === tp);
-                                    
+                                    if (show && tp !== 'all') show = (rtype === tp);
+
                                     // Category filter
-                                    if(show && cat !== 'all') show = (rcat === cat);
-                                    
+                                    if (show && cat !== 'all') show = (rcat === cat);
+
                                     // Date range filter
-                                    if(show && f && rdate) show = (rdate >= f);
-                                    if(show && t && rdate) show = (rdate <= t);
-                                    
+                                    if (show && f && rdate) show = (rdate >= f);
+                                    if (show && t && rdate) show = (rdate <= t);
+
                                     r.style.display = show ? '' : 'none';
-                                    if(show) visible++;
+                                    if (show) visible++;
                                 });
                                 countEl.textContent = visible;
+                                updateTransactionSummary();
                             }
 
-                            [search,type,category,from,to].forEach(el => el && el.addEventListener('change', applyFilters));
+                            [search, type, category, from, to].forEach(el => el && el.addEventListener('change', applyFilters));
                             [search].forEach(el => el && el.addEventListener('input', applyFilters));
+
+                            // Format rupees with Indian grouping
+                            function formatRupee(val) {
+                                const n = Number(val) || 0;
+                                return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            }
+
+                            function updateTransactionSummary() {
+                                let totalExpenses = 0, totalIncome = 0;
+                                const catMap = {}; // category -> signed cents (income positive, expense negative)
+
+                                rows.forEach(r => {
+                                    if (r.style.display === 'none') return;
+                                    const amt = parseFloat(r.dataset.amount) || 0; // rupees
+                                    const tp = r.dataset.type || '';
+                                    const cat = (r.dataset.cat && r.dataset.cat.trim()) ? r.dataset.cat : 'Uncategorized';
+
+                                    if (tp === 'expense') {
+                                        totalExpenses += amt;
+                                        catMap[cat] = (catMap[cat] || 0) - amt;
+                                    } else {
+                                        totalIncome += amt;
+                                        catMap[cat] = (catMap[cat] || 0) + amt;
+                                    }
+                                });
+
+                                const net = totalIncome - totalExpenses;
+                                document.getElementById('totalVisible').textContent = (net >= 0 ? '₹' : '-₹') + formatRupee(Math.abs(net));
+                                document.getElementById('totalExpenses').textContent = '₹' + formatRupee(totalExpenses);
+                                document.getElementById('totalIncome').textContent = '₹' + formatRupee(totalIncome);
+
+                                // Render category breakdown sorted by absolute amount desc
+                                const tbody = document.querySelector('#categoryBreakdown tbody');
+                                tbody.innerHTML = '';
+                                const entries = Object.entries(catMap).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+                                if (entries.length === 0) {
+                                    const tr = document.createElement('tr');
+                                    tr.innerHTML = '<td colspan="2" class="text-xs text-gray-500 p-2">No categories to show.</td>';
+                                    tbody.appendChild(tr);
+                                } else {
+                                    entries.forEach(([cat, val]) => {
+                                        const tr = document.createElement('tr');
+                                        const cls = val < 0 ? 'text-red-600' : 'text-green-600';
+                                        const display = (val < 0 ? '-₹' : '₹') + formatRupee(Math.abs(val));
+                                        tr.innerHTML = `<td style="padding:0.5rem;border-bottom:1px solid #f3f4f6;">${cat}</td><td style="padding:0.5rem;border-bottom:1px solid #f3f4f6;text-align:right;" class="${cls}">${display}</td>`;
+                                        tbody.appendChild(tr);
+                                    });
+                                }
+                            }
+
+                            // initial summary calc
+                            applyFilters();
                         })();
                     </script>
                 </div>
@@ -167,4 +264,5 @@
         </div>
     </main>
 </body>
+
 </html>
