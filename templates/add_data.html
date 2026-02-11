@@ -92,6 +92,10 @@
       border-bottom-color: #3b82f6;
     }
 
+    .type-tab.upload.active {
+      border-bottom-color: #8b5cf6;
+    }
+
     .type-tab span {
       font-size: 1.25rem;
       margin-right: 0.5rem;
@@ -368,6 +372,9 @@
         </button>
         <button class="type-tab bill" data-type="bill">
           <span>📄</span>Bill
+        </button>
+        <button class="type-tab upload" data-type="upload">
+          <span>📤</span>Upload Bill
         </button>
       </div>
 
@@ -651,6 +658,42 @@
         </form>
       </div>
 
+      <!-- UPLOAD BILL FORM -->
+      <div class="form-section upload">
+        <h2><span>📤</span>Upload Bill (Auto-Scan)</h2>
+        <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1.5rem; line-height: 1.5;">
+          Upload a bill receipt (PDF or image) and we'll automatically scan it to create an <strong>expense transaction</strong>.
+          The system will extract the amount, date, merchant name, and auto-categorize it.
+        </p>
+        
+        <div style="background: #f9fafb; padding: 2rem; border-radius: 8px; border: 2px dashed #d1d5db;">
+          <label style="display: block; margin-bottom: 1.5rem;">
+            <div style="font-weight: 600; margin-bottom: 0.75rem; color: #374151; font-size: 0.9rem;">Select Bill (PDF/Image)</div>
+            <input type="file" id="bill-file" accept=".pdf,.jpg,.jpeg,.png" style="padding: 0.75rem; width: 100%; border: 2px solid #d1d5db; border-radius: 6px; background: white; font-size: 0.875rem;" />
+            <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280;">
+              ✓ Supported formats: JPG, PNG, PDF
+            </div>
+          </label>
+          
+          <button type="button" id="upload-bill-btn" style="width: 100%; padding: 1rem; background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); color: white; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 1rem;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(139, 92, 246, 0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+            🔍 Scan & Add as Expense
+          </button>
+          
+          <div id="upload-status" style="margin-top: 1.5rem; font-size: 0.875rem; text-align: center; padding: 0.75rem; border-radius: 6px;"></div>
+          
+          <div style="margin-top: 1.5rem; padding: 1rem; background: white; border-radius: 6px; border-left: 4px solid #8b5cf6;">
+            <div style="font-weight: 600; color: #374151; margin-bottom: 0.5rem; font-size: 0.875rem;">💡 What gets extracted:</div>
+            <ul style="margin: 0; padding-left: 1.5rem; color: #6b7280; font-size: 0.8rem; line-height: 1.6;">
+              <li>Total amount (automatically finds the final total)</li>
+              <li>Date of transaction</li>
+              <li>Merchant/vendor name</li>
+              <li><strong>Smart categorization</strong> (Food, Transport, Healthcare, etc.)</li>
+              <li>Creates an expense transaction in your account</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
 
     </div>
   </main>
@@ -769,6 +812,54 @@
         setTimeout(() => toast.remove(), 300);
       }, 3000);
     }
+
+    // Bill Upload Handler
+    document.getElementById('upload-bill-btn')?.addEventListener('click', async () => {
+      const fileInput = document.getElementById('bill-file');
+      const statusDiv = document.getElementById('upload-status');
+      const btn = document.getElementById('upload-bill-btn');
+      const file = fileInput.files[0];
+      
+      if (!file) {
+        statusDiv.textContent = '⚠️ Please select a file first';
+        statusDiv.style.color = '#ef4444';
+        return;
+      }
+      
+      btn.disabled = true;
+      btn.textContent = '⏳ Scanning bill...';
+      statusDiv.textContent = 'Processing...';
+      statusDiv.style.color = '#3b82f6';
+      
+      const formData = new FormData();
+      formData.append('bill-file', file);
+      
+      try {
+        const response = await fetch('/api/upload_bill', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          statusDiv.innerHTML = `<div style="background: #d1fae5; color: #065f46; padding: 1rem; border-radius: 6px; border: 1px solid #10b981;"><strong>✅ Expense Added Successfully!</strong><br>Merchant: ${data.merchant}<br>Amount: ₹${data.amount}<br>Date: ${data.date}</div>`;
+          fileInput.value = '';
+          showToast(`✅ Expense added: ${data.merchant} - ₹${data.amount}`, 'success');
+          setTimeout(() => { statusDiv.textContent = ''; }, 7000);
+        } else {
+          statusDiv.innerHTML = `<div style="background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 6px; border: 1px solid #ef4444;">❌ ${data.error}</div>`;
+          showToast(`❌ ${data.error}`, 'error');
+        }
+      } catch (error) {
+        statusDiv.textContent = '❌ Upload failed. Please try again.';
+        statusDiv.style.color = '#ef4444';
+        showToast('❌ Upload failed', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔍 Scan & Create Bill';
+      }
+    });
 
 
   </script>

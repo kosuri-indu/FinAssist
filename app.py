@@ -19,6 +19,10 @@ from agents.web_agent import fetch_url_text, post_action
 from agents.advisor import build_advice
 # from agents.investment_agent import investment_advice
 # from agents.langchain_tools import build_investment_agent_llm
+import pytesseract
+from PIL import Image
+import pdfplumber
+import re
 
 def _compute_next_due_from(start_date, period, interval_count=1):
     if not start_date:
@@ -59,6 +63,12 @@ def _compute_next_due_from(start_date, period, interval_count=1):
 load_dotenv()
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret')
+
+# Configure Tesseract for Windows
+if os.name == 'nt':  # Windows
+    tesseract_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    if os.path.exists(tesseract_path):
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
 
 
 def get_current_user():
@@ -309,6 +319,226 @@ def api_web_post():
         return jsonify(res)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/upload_bill', methods=['POST'])
+def upload_bill():
+    """Upload and scan bill (PDF/Image) to auto-create expense transaction."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    file = request.files.get('bill-file')
+    if not file:
+        return jsonify({'error': 'No file uploaded'}), 400
+    
+    try:
+        text = ''
+        
+        # Extract text from image using OCR
+        if file.mimetype.startswith('image'):
+            try:
+                img = Image.open(file.stream)
+                text = pytesseract.image_to_string(img)
+            except Exception as e:
+                return jsonify({'error': f'Image OCR failed: {str(e)}. Make sure Tesseract is installed.'}), 400
+        
+        # Extract text from PDF
+        elif file.mimetype == 'application/pdf':
+            try:
+                with pdfplumber.open(file.stream) as pdf:
+                    for page in pdf.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text += page_text + '\n'
+            except Exception as e:
+                return jsonify({'error': f'PDF extraction failed: {str(e)}'}), 400
+        else:
+            return jsonify({'error': 'Unsupported file type. Use PDF, JPG, or PNG'}), 400
+        
+        if not text.strip():
+            return jsonify({'error': 'Could not extract text from file'}), 400
+        
+        # Parse amount - improved patterns to catch more formats
+        amount = None
+        amount_patterns = [
+            # Specific bill patterns
+            r'Amount\s+Incl[^\d]*(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'Grand\s+Total[:\s]*(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'Net\s+Amount[:\s]*(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'Total\s+Amount[:\s]*(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'Final\s+Amount[:\s]*(\d{1,7}(?:[,\.]\d{1,2})?)',
+            # Generic patterns
+            r'Total[:\s]+(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'Amount[:\s]+(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'₹\s*(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'Rs\.?\s*(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'Bill\s+Amount[:\s]*(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'Due[:\s]+(\d{1,7}(?:[,\.]\d{1,2})?)',
+            r'Pay[:\s]+(\d{1,7}(?:[,\.]\d{1,2})?)',
+            # Last resort - find largest number (likely the total)
+            r'(\d{3,7}(?:[,\.]\d{2}))',
+        ]
+        
+        amounts_found = []
+        for pattern in amount_patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                amount_str = match.group(1).replace(',', '').replace(' ', '')
+                try:
+                    amt = float(amount_str)
+                    if amt > 0:
+                        amounts_found.append(amt)
+                except:
+                    continue
+        
+        # Pick the largest amount found (usually the total)
+        if amounts_found:
+            amount = max(amounts_found)
+        
+        if not amount or amount <= 0:
+            return jsonify({'error': 'Could not detect bill amount. Please add manually.'}), 400
+        
+        # Extract date from bill
+        transaction_date = datetime.utcnow()
+        date_patterns = [
+            r'Date[:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
+            r'Date[:\s]*(\d{2,4}[/-]\d{1,2}[/-]\d{1,2})',
+            r'(\d{1,2}[/-]\d{1,2}[/-]\d{4})',
+            r'(\d{2}/\d{2}/\d{4})',
+            r'(\d{1,2}-\d{1,2}-\d{4})',
+        ]
+        
+        for pattern in date_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                date_str = match.group(1)
+                # Try different date formats
+                for fmt in ['%d/%m/%Y', '%d-%m-%Y', '%m/%d/%Y', '%Y/%m/%d', '%d/%m/%y']:
+                    try:
+                        transaction_date = datetime.strptime(date_str, fmt)
+                        break
+                    except:
+                        continue
+                if transaction_date != datetime.utcnow():
+                    break
+        
+        # Try to extract merchant name
+        merchant_name = 'Bill Upload'
+        name_patterns = [
+            r'^([A-Z][A-Za-z\s]{2,50})',  # First capitalized line
+            r'([A-Z][A-Za-z\s&]{2,40})\n',  # Capitalized name before newline
+        ]
+        
+        for pattern in name_patterns:
+            match = re.search(pattern, text, re.MULTILINE)
+            if match:
+                merchant_name = match.group(1).strip()
+                if len(merchant_name) >= 3 and not any(x in merchant_name.lower() for x in ['bill', 'invoice', 'receipt', 'gstin', 'phone']):
+                    break
+        
+        # If no good name found, try first meaningful line
+        if merchant_name == 'Bill Upload':
+            lines = [l.strip() for l in text.split('\n') if l.strip()]
+            for line in lines[:5]:
+                if len(line) >= 3 and len(line) <= 50 and not line.replace(' ', '').isdigit():
+                    merchant_name = line
+                    break
+        
+        # Smart categorization based on bill content
+        def categorize_bill(text_content, merchant):
+            text_lower = text_content.lower()
+            merchant_lower = merchant.lower()
+            
+            # Food & Dining
+            if any(word in text_lower or word in merchant_lower for word in [
+                'restaurant', 'cafe', 'food', 'hotel', 'dhaba', 'biryani', 'pizza', 
+                'burger', 'chicken', 'meal', 'breakfast', 'lunch', 'dinner', 'chinese',
+                'menu', 'dish', 'cuisine', 'dine', 'eatery', 'kitchen', 'swiggy', 'zomato'
+            ]):
+                return 'Dining Out'
+            
+            # Groceries
+            elif any(word in text_lower or word in merchant_lower for word in [
+                'grocery', 'supermarket', 'mart', 'store', 'kirana', 'vegetables', 
+                'fruits', 'milk', 'bread', 'rice', 'dal', 'provisions'
+            ]):
+                return 'Groceries'
+            
+            # Transport
+            elif any(word in text_lower or word in merchant_lower for word in [
+                'uber', 'ola', 'taxi', 'cab', 'transport', 'bus', 'metro', 'train',
+                'auto', 'rickshaw', 'rapido', 'fuel', 'petrol', 'diesel', 'parking'
+            ]):
+                return 'Transport'
+            
+            # Healthcare
+            elif any(word in text_lower or word in merchant_lower for word in [
+                'hospital', 'clinic', 'pharmacy', 'medical', 'doctor', 'medicine',
+                'health', 'apollo', 'diagnostic', 'lab', 'test'
+            ]):
+                return 'Healthcare'
+            
+            # Utilities
+            elif any(word in text_lower or word in merchant_lower for word in [
+                'electricity', 'water', 'gas', 'utility', 'power', 'lpg'
+            ]):
+                return 'Utilities - Electricity'
+            
+            # Internet/Mobile
+            elif any(word in text_lower or word in merchant_lower for word in [
+                'internet', 'broadband', 'wifi', 'mobile', 'phone', 'airtel', 
+                'jio', 'vodafone', 'recharge', 'telecom'
+            ]):
+                return 'Internet'
+            
+            # Entertainment
+            elif any(word in text_lower or word in merchant_lower for word in [
+                'movie', 'cinema', 'theatre', 'pvr', 'inox', 'show', 'netflix',
+                'amazon prime', 'spotify', 'gaming'
+            ]):
+                return 'Entertainment'
+            
+            # Shopping
+            elif any(word in text_lower or word in merchant_lower for word in [
+                'amazon', 'flipkart', 'myntra', 'shopping', 'mall', 'clothing',
+                'fashion', 'shoes', 'accessories'
+            ]):
+                return 'Clothing'
+            
+            # Default
+            else:
+                return 'Other'
+        
+        # Auto-categorize
+        category_name = categorize_bill(text, merchant_name)
+        category = get_or_create_category(user, category_name)
+        
+        txn = Transaction(
+            user_id=user.id,
+            txn_type='expense',
+            amount_cents=int(amount * 100),
+            occurred_at=transaction_date,
+            description=f'{merchant_name} (Auto-scanned)',
+            currency='INR',
+            category_id=(category.id if category else None),
+            meta={'source': 'bill_upload', 'scanned': True, 'merchant': merchant_name}
+        )
+        
+        db.session.add(txn)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'amount': round(amount, 2),
+            'merchant': merchant_name,
+            'date': transaction_date.strftime('%d/%m/%Y'),
+            'transaction_id': txn.id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
 
 # Replace your current /api/invest route with this:
 

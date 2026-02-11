@@ -9,3 +9,8 @@ yfinance
 websocket-client
 supabase>=1.0
 APScheduler>=3.9
+pytesseract
+Pillow
+pdfplumber
+beautifulsoup4
+requests
