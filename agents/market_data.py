@@ -2,6 +2,9 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 
+# Exchange rate: 1 USD = 83 INR (approximate, adjust as needed)
+USD_TO_INR = 83
+
 
 def get_stock_price(ticker: str) -> dict:
     """Get current stock price."""
@@ -68,14 +71,15 @@ def get_detailed_stock_analysis(ticker: str) -> dict:
         
         # Format market cap
         if market_cap:
-            if market_cap >= 1e12:
-                market_cap_str = f"${market_cap/1e12:.2f}T"
-            elif market_cap >= 1e9:
-                market_cap_str = f"${market_cap/1e9:.2f}B"
-            elif market_cap >= 1e6:
-                market_cap_str = f"${market_cap/1e6:.2f}M"
+            market_cap_inr = market_cap * USD_TO_INR
+            if market_cap_inr >= 1e12:
+                market_cap_str = f"₹{market_cap_inr/1e12:.2f}T"
+            elif market_cap_inr >= 1e9:
+                market_cap_str = f"₹{market_cap_inr/1e9:.2f}B"
+            elif market_cap_inr >= 1e6:
+                market_cap_str = f"₹{market_cap_inr/1e6:.2f}M"
             else:
-                market_cap_str = f"${market_cap:,.0f}"
+                market_cap_str = f"₹{market_cap_inr:,.0f}"
         else:
             market_cap_str = "N/A"
         

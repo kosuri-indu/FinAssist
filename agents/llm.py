@@ -3,8 +3,8 @@ import time
 import requests
 from openai import OpenAI
 
-# OpenAI client (fallback only)
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# OpenAI client (lazy init fallback)
+client = None
 
 # Track which provider was used
 last_provider = None
@@ -57,6 +57,14 @@ def call_llm(prompt: str) -> str:
     global last_provider
     
     groq_key = os.environ.get('GROQ_API_KEY')
+    openai_key = os.environ.get('OPENAI_API_KEY')
+
+    # Fail fast with a clear configuration message if no provider is configured.
+    if not groq_key and not openai_key:
+        return (
+            "Error: No LLM API key configured. Set GROQ_API_KEY or OPENAI_API_KEY "
+            "in your environment before running FinAssist."
+        )
     
     # Try Groq first if key is available
     if groq_key:
@@ -99,6 +107,10 @@ def call_llm(prompt: str) -> str:
     
     # OpenAI fallback
     try:
+        global client
+        if client is None:
+            client = OpenAI(api_key=openai_key)
+
         r = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[

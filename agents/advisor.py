@@ -2,6 +2,9 @@ from agents.llm import call_llm
 from agents.market_data import get_stock_price
 import yfinance as yf
 
+# Exchange rate: 1 USD = 83 INR (approximate, adjust as needed)
+USD_TO_INR = 93
+
 
 def get_stock_details(ticker: str, quantity: int) -> dict:
     """Get essential stock details for analysis."""
@@ -120,17 +123,21 @@ Be specific, actionable, and professional."""
         if "error" not in details:
             stock_details.append(details)
             total_value += details.get('value', 0)
-            print(f"✓ {ticker}: ${details.get('current_price'):.2f} x {qty} = ${details.get('value'):.2f}")
+            price_inr = details.get('current_price', 0) * USD_TO_INR
+            value_inr = details.get('value', 0) * USD_TO_INR
+            print(f"✓ {ticker}: ₹{price_inr:,.2f} x {qty} = ₹{value_inr:,.2f}")
         else:
             print(f"✗ {ticker}: {details.get('error')}")
             stock_details.append(details)
     
-    print(f"\nTotal Portfolio Value: ${total_value:.2f}")
+    total_value_inr = total_value * USD_TO_INR
+    print(f"\nTotal Portfolio Value: ₹{total_value_inr:,.2f}")
     print("="*60 + "\n")
     
     # Build detailed portfolio context
+    total_value_inr = total_value * USD_TO_INR
     portfolio_context = f"""PORTFOLIO OVERVIEW:
-Total Value: ${total_value:.2f}
+Total Value: ₹{total_value_inr:,.2f}
 Number of Holdings: {len(portfolio)}
 
 HOLDINGS DETAIL:
@@ -149,8 +156,10 @@ HOLDINGS DETAIL:
         sector = details.get('sector', 'N/A')
         
         portfolio_context += f"\n{ticker} ({company})\n"
-        portfolio_context += f"  Current Price: ${price:.2f} per share\n"
-        portfolio_context += f"  Your Position: {qty} shares valued at ${value:.2f}\n"
+        price_inr = price * USD_TO_INR
+        value_inr = value * USD_TO_INR
+        portfolio_context += f"  Current Price: ₹{price_inr:,.2f} per share\n"
+        portfolio_context += f"  Your Position: {qty} shares valued at ₹{value_inr:,.2f}\n"
         portfolio_context += f"  Sector: {sector}\n"
         
         # Performance
@@ -162,7 +171,9 @@ HOLDINGS DETAIL:
         
         # 52-week range
         if details.get('high_52w') and details.get('low_52w'):
-            portfolio_context += f"  52-Week Range: ${details['low_52w']} - ${details['high_52w']}\n"
+            low_52w_inr = details['low_52w'] * USD_TO_INR
+            high_52w_inr = details['high_52w'] * USD_TO_INR
+            portfolio_context += f"  52-Week Range: ₹{low_52w_inr:,.2f} - ₹{high_52w_inr:,.2f}\n"
         
         # Fundamentals
         if details.get('pe_ratio'):
@@ -172,18 +183,19 @@ HOLDINGS DETAIL:
         if details.get('beta'):
             portfolio_context += f"  Beta: {details['beta']}\n"
         if details.get('target_price'):
+            target_price_inr = details['target_price'] * USD_TO_INR
             upside = ((details['target_price'] - price) / price) * 100
-            portfolio_context += f"  Analyst Target Price: ${details['target_price']} ({upside:+.2f}% potential)\n"
+            portfolio_context += f"  Analyst Target Price: ₹{target_price_inr:,.2f} ({upside:+.2f}% potential)\n"
         
         # Market cap
         if details.get('market_cap'):
-            mcap = details['market_cap']
+            mcap = details['market_cap'] * USD_TO_INR
             if mcap >= 1e12:
-                mcap_str = f"${mcap/1e12:.2f}T"
+                mcap_str = f"₹{mcap/1e12:.2f}T"
             elif mcap >= 1e9:
-                mcap_str = f"${mcap/1e9:.2f}B"
+                mcap_str = f"₹{mcap/1e9:.2f}B"
             else:
-                mcap_str = f"${mcap/1e6:.2f}M"
+                mcap_str = f"₹{mcap/1e6:.2f}M"
             portfolio_context += f"  Market Cap: {mcap_str}\n"
 
     # Build main query
